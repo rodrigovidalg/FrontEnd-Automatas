@@ -1,7 +1,13 @@
+import { FilterOption } from '../utils/constants';
+
 export interface CameraState {
-  stream: MediaStream | null;
-  currentCamera: number;
   isActive: boolean;
+  currentCamera: number;
+  stream: MediaStream | null;
+  filter: string;
+  brightness: number;
+  contrast: number;
 }
 
-export {};
+// Re-exportar FilterOption para mantener compatibilidad
+export type { FilterOption };

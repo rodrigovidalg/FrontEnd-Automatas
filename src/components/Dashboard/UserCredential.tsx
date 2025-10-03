@@ -1,16 +1,71 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { User } from '../../types/user.types';
+import Button from '../UI/Button';
+import { generateCredentialPDF } from '../../services/pdfService';
 
 interface UserCredentialProps {
   user: User;
-  onBack: () => void;
+  onClose: () => void;
 }
 
-export const UserCredential: React.FC<UserCredentialProps> = ({ user, onBack }) => {
+const UserCredential: React.FC<UserCredentialProps> = ({ user, onClose }) => {
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (qrCanvasRef.current) {
+      // Generate QR code
+      try {
+        // En un entorno real, usaría una librería QR adecuada
+        // Por ahora, solo dibujamos un placeholder
+        const canvas = qrCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx) {
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, 80, 80);
+          
+          // Draw a simple pattern to simulate QR
+          ctx.fillStyle = '#fff';
+          for (let i = 0; i < 8; i++) {
+            for (let j = 0; j < 8; j++) {
+              if ((i + j) % 2 === 0) {
+                ctx.fillRect(i * 10, j * 10, 10, 10);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error generando QR:', error);
+      }
+    }
+  }, [user]);
+
+  const handleDownloadPDF = () => {
+    generateCredentialPDF(user);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-135 from-teal-500/5 via-gray-400/10 to-teal-500/5 bg-size-400 bg-pos-0-50 animate-gradient-shift p-10">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-8 text-teal-600">
+    <div style={{
+      background: 'linear-gradient(135deg, ' +
+        'rgba(81, 115, 111, 0.05) 0%, ' +
+        'rgba(204, 208, 217, 0.1) 25%,' +
+        'rgba(102, 105, 115, 0.08) 50%,' +
+        'rgba(81, 115, 111, 0.03) 75%,' +
+        'rgba(242, 242, 242, 0.1) 100%)',
+      minHeight: '100vh',
+      padding: '40px',
+      color: 'var(--color-black)',
+      textAlign: 'center'
+    }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <h1 style={{
+          fontSize: '2em',
+          marginBottom: '20px',
+          background: 'linear-gradient(135deg, #51736F, #666973)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text'
+        }}>
           🆔 Tu Credencial Digital
         </h1>
         
@@ -21,13 +76,7 @@ export const UserCredential: React.FC<UserCredentialProps> = ({ user, onBack }) 
           </div>
           
           <div className="id-card-photo">
-            <img 
-              src={user.processedPhoto || user.originalPhoto || '/default-avatar.png'} 
-              alt="Foto de perfil" 
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjRjJGMkYyIi8+CjxwYXRoIGQ9Ik02MCA2MEM2Ni42Mjg0IDYwIDcyIDU0LjYyODQgNzIgNDhDNzIgNDEuMzcxNiA2Ni42Mjg0IDM2IDYwIDM2QzUzLjM3MTYgMzYgNDggNDEuMzcxNiA0OCA0OEM0OCA1NC42Mjg0IDUzLjM3MTYgNjAgNjAgNjBaIiBmaWxsPSIjNTE3MzZGIi8+CjxwYXRoIGQ9Ik02MCA2NEMzOS4wODg1IDY0IDIyIDc3Ljg0MjIgMjIgOTVWOThIOThWOTVDOTggNzcuODQyMiA4MC45MTE1IDY0IDYwIDY0WiIgZmlsbD0iIzUxNzM2RiIvPgo8L3N2Zz4K';
-              }}
-            />
+            <img src={user.processedPhoto || user.originalPhoto} alt="Foto de perfil" />
           </div>
           
           <div className="id-card-info">
@@ -35,22 +84,27 @@ export const UserCredential: React.FC<UserCredentialProps> = ({ user, onBack }) 
               <div className="info-label">Nombre:</div>
               <div className="info-value">{user.nickname}</div>
             </div>
+            
             <div className="info-item">
               <div className="info-label">Email:</div>
               <div className="info-value">{user.email}</div>
             </div>
+            
             <div className="info-item">
               <div className="info-label">Teléfono:</div>
               <div className="info-value">{user.phone}</div>
             </div>
+            
             <div className="info-item">
               <div className="info-label">Rol:</div>
               <div className="info-value">{user.role}</div>
             </div>
+            
             <div className="info-item">
               <div className="info-label">ID:</div>
               <div className="info-value">{user.id}</div>
             </div>
+            
             <div className="info-item">
               <div className="info-label">Fecha:</div>
               <div className="info-value">
@@ -62,22 +116,35 @@ export const UserCredential: React.FC<UserCredentialProps> = ({ user, onBack }) 
           <div className="id-card-footer">
             <div className="verification-badge">VERIFICADO</div>
             <div className="qr-code-container">
-              <div className="text-xs text-center text-gray-500">
-                QR Code
-              </div>
+              <canvas 
+                ref={qrCanvasRef}
+                id="credentialQR" 
+                width="80" 
+                height="80"
+              />
             </div>
           </div>
         </div>
         
-        <div className="text-center mt-8">
-          <button 
-            className="px-6 py-3 bg-teal-500 text-white rounded-xl font-semibold hover:bg-teal-600 transition-colors"
-            onClick={onBack}
+        <div style={{ marginTop: '30px' }}>
+          <Button 
+            variant="primary"
+            onClick={handleDownloadPDF}
+            style={{ marginRight: '15px' }}
+          >
+            Descargar PDF
+          </Button>
+          
+          <Button 
+            variant="secondary"
+            onClick={onClose}
           >
             Volver al Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     </div>
   );
 };
+
+export default UserCredential;

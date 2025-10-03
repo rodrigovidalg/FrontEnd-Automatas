@@ -1,46 +1,44 @@
 import React from 'react';
 
-interface InputProps {
+interface SelectProps {
   id?: string;
-  type?: string;
-  placeholder?: string;
   value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   label?: string;
   required?: boolean;
   disabled?: boolean;
   className?: string;
   name?: string;
+  children: React.ReactNode;
 }
 
-const Input: React.FC<InputProps> = ({
+const Select: React.FC<SelectProps> = ({
   id,
-  type = 'text',
-  placeholder,
   value,
   onChange,
   label,
   required = false,
   disabled = false,
   className = '',
-  name
+  name,
+  children
 }) => {
   return (
     <div className={`form-group ${className}`}>
       {label && <label className="form-label">{label}</label>}
-      <input
+      <select
         id={id}
-        type={type}
         className="form-input"
-        placeholder={placeholder}
         value={value}
         onChange={onChange}
         required={required}
         disabled={disabled}
         name={name}
-      />
+      >
+        {children}
+      </select>
     </div>
   );
 };
 
-export default Input;
+export default Select;

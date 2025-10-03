@@ -1,87 +1,155 @@
-import React, { useEffect, useRef } from 'react';
-import { useCamera } from '../../hooks/useCamera';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { User } from '../../types/user.types';
+import ProcessStatus from '../UI/ProcessStatus';
 
 interface QRScannerModalProps {
-  isOpen: boolean;
+  isActive: boolean;
   onClose: () => void;
-  onShowStatus: (title: string, description: string, progress: number) => void;
-  onHideStatus: () => void;
 }
 
-export const QRScannerModal: React.FC<QRScannerModalProps> = ({
-  isOpen,
-  onClose,
-  onShowStatus,
-  onHideStatus
-}) => {
+const QRScannerModal: React.FC<QRScannerModalProps> = ({ isActive, onClose }) => {
+  const { loginWithQR } = useAuth();
+  const [showStatus, setShowStatus] = useState(false);
+  const [statusTitle, setStatusTitle] = useState('');
+  const [statusDescription, setStatusDescription] = useState('');
+  const [statusProgress, setStatusProgress] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { startCamera, stopCamera } = useCamera();
-  const { registeredUsers, quickLogin } = useAuth();
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanningTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (isOpen && videoRef.current) {
-      startCamera(videoRef.current).catch(error => {
-        console.error('Error starting camera:', error);
-      });
+  const startCamera = useCallback(async () => {
+    try {
+      const constraints = {
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'environment' // Use back camera for QR scanning
+        }
+      };
       
-      // Simular escaneo QR
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await new Promise(resolve => {
+          videoRef.current!.onloadedmetadata = resolve;
+        });
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  // Separar la lógica de éxito del reinicio del escaneo
+  const handleQRScanningSuccess = useCallback(async () => {
+    const success = await loginWithQR();
+    
+    if (success) {
+      setStatusTitle('Válido');
+      setStatusDescription('Acceso concedido');
+      setStatusProgress(100);
+      
       setTimeout(() => {
-        onShowStatus('QR Detectado', 'Validando código...', 70);
-        setTimeout(() => {
-          if (registeredUsers.length > 0) {
-            const matchedUser = registeredUsers[Math.floor(Math.random() * registeredUsers.length)] as User;
-            quickLogin(matchedUser);
-            onShowStatus('Válido', `Acceso concedido para ${matchedUser.nickname}`, 100);
-            setTimeout(() => {
-              onHideStatus();
-              onClose();
-            }, 2000);
-          }
-        }, 1500);
+        setShowStatus(false);
+        onClose();
+      }, 2000);
+    } else {
+      setStatusTitle('Inválido');
+      setStatusDescription('Código QR no reconocido');
+      setStatusProgress(0);
+      
+      setTimeout(() => {
+        setShowStatus(false);
       }, 3000);
     }
+  }, [loginWithQR, onClose]);
 
-    return () => {
-      stopCamera();
-    };
-  }, [isOpen, startCamera, stopCamera, registeredUsers, quickLogin, onShowStatus, onHideStatus, onClose]);
+  // Función para iniciar el escaneo QR
+  const startQRScanning = useCallback(() => {
+    // Clear any existing timeout
+    if (scanningTimeoutRef.current) {
+      clearTimeout(scanningTimeoutRef.current);
+    }
+    
+    // Simulate QR scanning
+    scanningTimeoutRef.current = setTimeout(() => {
+      setShowStatus(true);
+      setStatusTitle('QR Detectado');
+      setStatusDescription('Validando código...');
+      setStatusProgress(70);
+      
+      handleQRScanningSuccess();
+    }, 3000);
+  }, [handleQRScanningSuccess]);
 
-  if (!isOpen) return null;
+  // Manejar el reinicio del escaneo por separado
+  useEffect(() => {
+    if (!showStatus || statusTitle !== 'Inválido') return;
+    
+    const restartTimeout = setTimeout(() => {
+      startQRScanning();
+    }, 3000);
+
+    return () => clearTimeout(restartTimeout);
+  }, [showStatus, statusTitle, startQRScanning]);
+
+  useEffect(() => {
+    if (isActive && videoRef.current) {
+      startCamera();
+      startQRScanning();
+      
+      return () => {
+        stopCamera();
+        if (scanningTimeoutRef.current) {
+          clearTimeout(scanningTimeoutRef.current);
+        }
+      };
+    }
+  }, [isActive, startCamera, stopCamera, startQRScanning]);
 
   return (
-    <div className="camera-modal fixed top-0 left-0 w-full h-full bg-white/95 backdrop-blur-xl z-50 flex justify-center items-center animate-fadeIn p-5">
-      <div className="camera-container bg-white/98 backdrop-blur-xl rounded-3xl p-10 max-w-95vw max-h-95vh shadow-2xl relative border border-gray-300/30 w-full max-w-2xl">
-        <div className="camera-header flex justify-between items-center mb-8 pb-6 border-b border-gray-300/30">
-          <h2 className="camera-title text-2xl font-bold text-gray-900 bg-gradient-45 from-teal-500 to-gray-600 bg-clip-text text-transparent">
-            Escáner QR
-          </h2>
-          <button 
-            className="close-btn w-10 h-10 rounded-full bg-red-50 border border-red-200 text-red-500 flex items-center justify-center text-lg transition-all duration-300 hover:bg-red-100 hover:scale-110"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+    <div className={`camera-modal ${isActive ? 'active' : ''}`}>
+      <div className="camera-container">
+        <div className="camera-header">
+          <h2 className="camera-title">Escáner QR</h2>
+          <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-
-        <div className="text-center">
-          <div className="qr-scanner relative w-80 h-80 border-2 border-teal-500 rounded-2xl overflow-hidden shadow-lg mx-auto bg-gradient-45 from-teal-500/5 to-gray-400/5">
+        
+        <div style={{ textAlign: 'center' }}>
+          <div className="qr-scanner">
             <video 
+              id="qrVideo" 
               ref={videoRef}
-              className="qr-video w-full h-full object-cover"
+              className="qr-video"
               autoPlay 
               muted 
               playsInline
             />
-            <div className="qr-overlay absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-2 border-teal-500 rounded-xl animate-pulse"></div>
+            <div className="qr-overlay"></div>
           </div>
           
-          <p className="mt-8 text-gray-600">
+          <p style={{ marginTop: '20px', color: 'var(--color-dark-gray)' }}>
             Posiciona tu código QR dentro del marco para escanear
           </p>
         </div>
       </div>
+      
+      <ProcessStatus
+        show={showStatus}
+        title={statusTitle}
+        description={statusDescription}
+        progress={statusProgress}
+      />
     </div>
   );
 };
+
+export default QRScannerModal;
