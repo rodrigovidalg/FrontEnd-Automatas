@@ -5,45 +5,18 @@ export interface User {
   birthdate: string;
   nickname: string;
   passwordHash: string;
-  notifications: 'email' | 'whatsapp' | 'both';
+  notifications: boolean;
   originalPhoto?: string;
   processedPhoto?: string;
   registrationDate: string;
-  role: string;
+  role: 'analista' | 'admin' | 'user';
   faceData?: string;
+  qrCode?: string;
 }
 
-export interface CameraState {
-  stream: MediaStream | null;
-  currentCamera: number;
-  isActive: boolean;
+export interface UserSession {
+  user: User;
+  token: string;
+  loginMethod: 'password' | 'facial' | 'qr';
+  expiresAt: Date;
 }
-
-export interface FilterState {
-  type: 'normal' | 'vintage' | 'bw' | 'sepia';
-  brightness: number;
-  contrast: number;
-}
-
-export interface AuthState {
-  currentUser: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  registeredUsers: User[];
-}
-
-export interface ProcessStatus {
-  isVisible: boolean;
-  title: string;
-  description: string;
-  progress: number;
-  icon: string;
-}
-
-export interface QRData {
-  id: string;
-  email: string;
-  timestamp: number;
-}
-
-export {};

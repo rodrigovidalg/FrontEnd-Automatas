@@ -4,17 +4,17 @@ interface EmojiEffectsProps {
   onEmojiAdd: (emoji: string) => void;
 }
 
-export const EmojiEffects: React.FC<EmojiEffectsProps> = ({ onEmojiAdd }) => {
-  const emojis = ['😊', '🎉', '❤️', '⭐', '🚀'];
+const EmojiEffects: React.FC<EmojiEffectsProps> = ({ onEmojiAdd }) => {
+  const emojis = ['😊', '😎', '🤔', '😂', '❤️', '👍'];
 
   return (
     <div className="photo-effects">
-      {emojis.map(emoji => (
+      {emojis.map((emoji, index) => (
         <button
-          key={emoji}
+          key={index}
           className="emoji-btn"
           onClick={() => onEmojiAdd(emoji)}
-          title={`Añadir ${emoji}`}
+          title={`Agregar ${emoji}`}
         >
           {emoji}
         </button>
@@ -22,3 +22,5 @@ export const EmojiEffects: React.FC<EmojiEffectsProps> = ({ onEmojiAdd }) => {
     </div>
   );
 };
+
+export default EmojiEffects;

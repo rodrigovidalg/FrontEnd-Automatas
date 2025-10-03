@@ -1,8 +1,8 @@
-export interface AuthState {
-  currentUser: any | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  registeredUsers: any[];
-}
+import { User } from './user.types';
 
-export {};
+export interface AuthState {
+  isAuthenticated: boolean;
+  user: User | null;
+  loading: boolean;
+  error: string | null;
+}

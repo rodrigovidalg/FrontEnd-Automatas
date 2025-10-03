@@ -1,45 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-interface FloatingElement {
-  id: number;
-  left: number;
-  size: number;
-  delay: number;
-  duration: number;
-}
-
-export const FloatingElements: React.FC = () => {
-  const [elements, setElements] = useState<FloatingElement[]>([]);
+const FloatingElements: React.FC = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const newElements: FloatingElement[] = [];
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+    
+    // Create floating elements
     for (let i = 0; i < 15; i++) {
-      newElements.push({
-        id: i,
-        left: Math.random() * 100,
-        size: Math.random() * 60 + 20,
-        delay: Math.random() * 20,
-        duration: Math.random() * 10 + 15
-      });
+      const element = document.createElement('div');
+      element.className = 'floating-element';
+      element.style.left = `${Math.random() * 100}%`;
+      element.style.width = `${Math.random() * 60 + 20}px`;
+      element.style.height = element.style.width;
+      element.style.animationDelay = `${Math.random() * 20}s`;
+      element.style.animationDuration = `${Math.random() * 10 + 15}s`;
+      container.appendChild(element);
     }
-    setElements(newElements);
+
+    return () => {
+      // Clean up
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+    };
   }, []);
 
-  return (
-    <div className="floating-elements fixed top-0 left-0 w-full h-full pointer-events-none z-1 overflow-hidden">
-      {elements.map(element => (
-        <div
-          key={element.id}
-          className="floating-element absolute rounded-full bg-gradient-45 from-teal-500/10 to-gray-400/10"
-          style={{
-            left: `${element.left}%`,
-            width: `${element.size}px`,
-            height: `${element.size}px`,
-            animationDelay: `${element.delay}s`,
-            animationDuration: `${element.duration}s`
-          }}
-        />
-      ))}
-    </div>
-  );
+  return <div className="floating-elements" ref={containerRef}></div>;
 };
+
+export default FloatingElements;

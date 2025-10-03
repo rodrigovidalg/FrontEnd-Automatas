@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const FaceRecognitionFrame: React.FC = () => {
+const FaceRecognitionFrame: React.FC = () => {
   return (
     <div className="face-recognition-frame">
       <div className="hex-scanner"></div>
@@ -14,3 +14,5 @@ export const FaceRecognitionFrame: React.FC = () => {
     </div>
   );
 };
+
+export default FaceRecognitionFrame;

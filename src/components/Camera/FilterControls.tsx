@@ -1,24 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { FILTERS } from '../../utils/constants';
 
 interface FilterControlsProps {
-  currentFilter: string;
   onFilterChange: (filter: string) => void;
-  onEmojiAdd: (emoji: string) => void;
+  onFilterSettingsChange: (brightness: number, contrast: number) => void;
 }
 
-export const FilterControls: React.FC<FilterControlsProps> = ({
-  currentFilter,
+const FilterControls: React.FC<FilterControlsProps> = ({
   onFilterChange,
-  onEmojiAdd
+  onFilterSettingsChange
 }) => {
-  const filters = [
-    { id: 'normal', label: 'Normal', emoji: '🔍' },
-    { id: 'vintage', label: 'Vintage', emoji: '📸' },
-    { id: 'bw', label: 'Blanco y Negro', emoji: '⚫' },
-    { id: 'sepia', label: 'Sepia', emoji: '🟤' }
-  ];
+  const [activeFilter, setActiveFilter] = useState('normal');
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
 
-  const emojis = ['🌟', '💫', '🎈', '🎭', '🦄', '🌈', '🔥', '✨'];
+  const handleFilterClick = (filter: string) => {
+    setActiveFilter(filter);
+    onFilterChange(filter);
+  };
+
+  const handleBrightnessChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    setBrightness(value);
+    onFilterSettingsChange(value, contrast);
+  };
+
+  const handleContrastChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    setContrast(value);
+    onFilterSettingsChange(brightness, value);
+  };
 
   return (
     <div className="live-editor">
@@ -26,19 +37,19 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
       <div className="editor-section">
         <div className="editor-title">🎨 Filtros</div>
         <div className="filter-grid">
-          {filters.map(filter => (
+          {FILTERS.map((filter) => (
             <button
-              key={filter.id}
-              className={`filter-btn ${currentFilter === filter.id ? 'active' : ''}`}
-              onClick={() => onFilterChange(filter.id)}
-              title={filter.label}
+              key={filter.value}
+              className={`filter-btn ${activeFilter === filter.value ? 'active' : ''}`}
+              onClick={() => handleFilterClick(filter.value)}
+              title={filter.name}
             >
-              {filter.emoji}
+              {filter.icon}
             </button>
           ))}
         </div>
       </div>
-
+      
       {/* Ajustes */}
       <div className="editor-section">
         <div className="editor-title">⚙️ Ajustes</div>
@@ -46,47 +57,50 @@ export const FilterControls: React.FC<FilterControlsProps> = ({
         <div className="slider-container">
           <div className="slider-label">
             <span>Brillo</span>
-            <span className="slider-value">100%</span>
+            <span className="slider-value">{brightness}%</span>
           </div>
-          <input 
-            type="range" 
+          <input
+            type="range"
             className="slider"
-            min="50" 
-            max="150" 
-            defaultValue="100"
+            min="50"
+            max="150"
+            value={brightness}
+            onChange={handleBrightnessChange}
           />
         </div>
-
+        
         <div className="slider-container">
           <div className="slider-label">
             <span>Contraste</span>
-            <span className="slider-value">100%</span>
+            <span className="slider-value">{contrast}%</span>
           </div>
-          <input 
-            type="range" 
+          <input
+            type="range"
             className="slider"
-            min="50" 
-            max="150" 
-            defaultValue="100"
+            min="50"
+            max="150"
+            value={contrast}
+            onChange={handleContrastChange}
           />
         </div>
       </div>
-
+      
       {/* Emoji Gallery */}
       <div className="editor-section">
         <div className="editor-title">😊 Efectos Emoji</div>
         <div className="filter-grid">
-          {emojis.map(emoji => (
-            <button
-              key={emoji}
-              className="emoji-btn"
-              onClick={() => onEmojiAdd(emoji)}
-            >
-              {emoji}
-            </button>
-          ))}
+          <button className="emoji-btn">🌟</button>
+          <button className="emoji-btn">💫</button>
+          <button className="emoji-btn">🎈</button>
+          <button className="emoji-btn">🎭</button>
+          <button className="emoji-btn">🦄</button>
+          <button className="emoji-btn">🌈</button>
+          <button className="emoji-btn">🔥</button>
+          <button className="emoji-btn">✨</button>
         </div>
       </div>
     </div>
   );
 };
+
+export default FilterControls;
