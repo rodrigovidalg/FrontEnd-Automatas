@@ -18,12 +18,13 @@ export const generateCredentialPDF = async (user: User): Promise<void> => {
   // Información del usuario
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
-  doc.text(`Nombre: ${user.nickname}`, 30, 80);
-  doc.text(`Email: ${user.email}`, 30, 95);
-  doc.text(`Teléfono: ${user.phone}`, 30, 110);
-  doc.text(`Rol: ${user.role}`, 30, 125);
-  doc.text(`ID: ${user.id}`, 30, 140);
-  doc.text(`Fecha: ${new Date(user.registrationDate).toLocaleDateString()}`, 30, 155);
+  doc.text(`Nombre: ${user.fullName}`, 30, 80);
+  doc.text(`Usuario: ${user.nickname}`, 30, 95);
+  doc.text(`Email: ${user.email}`, 30, 110);
+  doc.text(`Teléfono: ${user.phone}`, 30, 125);
+  doc.text(`Rol: ${user.role}`, 30, 140);
+  doc.text(`ID: ${user.id}`, 30, 155);
+  doc.text(`Fecha: ${new Date(user.registrationDate).toLocaleDateString()}`, 30, 170);
   
   // Generar QR
   try {
