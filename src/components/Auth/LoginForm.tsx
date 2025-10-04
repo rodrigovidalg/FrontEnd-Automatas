@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom'; // ⬅️ NUEVO
 import Button from '../UI/Button';
 import Input from '../UI/Input';
 import ProcessStatus from '../UI/ProcessStatus';
@@ -24,6 +25,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [statusProgress, setStatusProgress] = useState(0);
   
   const { login } = useAuth();
+  const navigate = useNavigate();                // ⬅️ NUEVO
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +51,12 @@ const LoginForm: React.FC<LoginFormProps> = ({
       setStatusTitle('Éxito');
       setStatusDescription('Login exitoso, redirigiendo...');
       setStatusProgress(100);
+
+      // ⬅️ REDIRECCIÓN AL DASHBOARD SOLO SI EL LOGIN FUE EXITOSO
+      // Si quieres ver el estado unos ms antes de salir, descomenta el setTimeout:
+      // setTimeout(() => navigate('/dashboard', { replace: true }), 300);
+      navigate('/dashboard', { replace: true });
+      return;
     } else {
       setStatusTitle('Error');
       setStatusDescription('Credenciales incorrectas');
