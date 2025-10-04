@@ -1,0 +1,175 @@
+/* =======================
+   Dashboard — Scoped CSS
+   ======================= */
+
+:root, .dash {
+  /* Paleta / tokens */
+  --bg: #f5f7f6;
+  --card: #ffffff;
+  --muted: #6b7280;
+
+  --primary-700: #2e5e54;  /* Botón principal */
+  --primary-600: #3a6f64;  /* Hover */
+  --primary-500: #447c6f;  /* Acentos / barras */
+  --primary-100: #e6f1ee;  /* Chips claros */
+
+  --border: #e5e7eb;
+  --border-strong: #dfe7e5;
+
+  --ring: 0 0 0 4px rgba(58,111,100,.12);
+  --shadow-sm: 0 2px 10px rgba(17,24,39,.06);
+  --shadow: 0 18px 40px rgba(17,24,39,.10);
+
+  --radius-xl: 18px;
+  --radius-lg: 14px;
+  --radius-md: 12px;
+}
+
+.dash * { box-sizing: border-box; }
+
+.dash{
+  position:relative;
+  padding:24px;
+  min-height:100dvh;
+  background:
+    radial-gradient(1200px 600px at -10% -10%, #e9f3f0 0%, transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, #eef7f4 0%, transparent 60%),
+    var(--bg);
+}
+
+/* ===== Header ===== */
+.dash .dash__header{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  margin-bottom:18px;
+}
+.dash .dash__header h1{ margin:0; text-shadow:0 10px 30px rgba(58,111,100,.12); }
+.dash .dash__subtitle{ margin:6px 0 0 0; color:var(--muted) }
+.dash .dash__actions{ display:flex; align-items:center; gap:12px }
+.dash .welcome{
+  background: linear-gradient(180deg,#f4fbf8,#eaf4f0);
+  border:1px solid #d9ebe6;
+  padding:10px 14px; border-radius:999px; color:var(--primary-700);
+  font-weight:700; box-shadow: var(--shadow-sm);
+}
+
+/* ===== Botones ===== */
+.dash .btn{
+  appearance:none; border:1px solid var(--border); background:var(--card);
+  color:#111827; padding:12px 18px; border-radius:var(--radius-lg); cursor:pointer;
+  transition:transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  box-shadow: var(--shadow-sm);
+}
+.dash .btn:hover{ transform:translateY(-1px); box-shadow: var(--shadow); }
+.dash .btn:active{ transform:translateY(0); }
+.dash .btn:focus-visible{ outline:none; box-shadow: var(--shadow), var(--ring); }
+.dash .btn--primary{ background:var(--primary-700); color:#fff; border-color:transparent; }
+.dash .btn--primary:hover{ background:var(--primary-600); }
+
+/* ===== Barra superior ===== */
+.dash .bar{
+  display:grid;
+  grid-template-columns: 1.4fr 1fr 180px;
+  gap:14px; align-items:start; margin:18px 0 22px;
+}
+
+/* Cargar TXT */
+.dash .file-picker{ display:flex; align-items:center; gap:12px }
+.dash .file-picker .btn{
+  width:100%; justify-content:center;
+  background: linear-gradient(180deg,#ffffff,#f7faf9);
+  border-color:#e3ece9; color:#374151;
+}
+.dash .hint{
+  display:inline-flex; gap:6px; align-items:center; color:var(--muted);
+  font-size:.92rem;
+}
+
+/* Idioma (combobox) */
+.dash .lang-select{ display:flex; align-items:center; gap:12px; }
+.dash .lang-select .btn{ background:#fff; }
+
+.dash select.btn{
+  min-width:180px; background:#fff; border-color:var(--border);
+  font-weight:600; color:#1f2937;
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  padding-right:42px; position:relative;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6b7280 50%),
+    linear-gradient(135deg, #6b7280 50%, transparent 50%),
+    linear-gradient(#e5e7eb, #e5e7eb);
+  background-position:
+    calc(100% - 22px) calc(50% - 3px),
+    calc(100% - 16px) calc(50% - 3px),
+    calc(100% - 26px) 50%;
+  background-size: 6px 6px, 6px 6px, 2px 18px;
+  background-repeat: no-repeat;
+}
+.dash select.btn:focus{ box-shadow: var(--shadow), var(--ring); }
+
+/* Acciones (a la derecha, tipo panel flotante) */
+.dash .actions{
+  display:flex; flex-direction:column; gap:12px; justify-self:end; align-self:start;
+  position: sticky; top:14px;
+}
+.dash .actions .btn{ width:170px; }
+.dash .actions .btn--primary{ box-shadow: 0 24px 50px rgba(46,94,84,.25); }
+
+/* ===== Cards ===== */
+.dash .card{
+  background:var(--card); border:1px solid #eef2f2;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm); overflow:hidden;
+}
+.dash .card__header{
+  padding:14px 16px; border-bottom:1px solid #f0f2f2; font-weight:800; color:#111827;
+}
+.dash .card__body{ padding:16px; }
+
+/* Borde grueso opcional para cualquier card (si quieres quitar inline styles) */
+.dash .card--thick{
+  border-width:2.5px; border-style:solid; border-color:var(--border-strong);
+}
+
+/* Contenido TXT (readonly) */
+.dash .raw-view{
+  width:100%; min-height:200px; max-height:420px;
+  border:1px solid var(--border); border-radius:14px; padding:12px;
+  background:#fff; box-shadow: var(--shadow-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.dash .raw-view--readonly{
+  border:2.5px solid var(--border-strong);
+  white-space:pre-wrap; word-break:break-word;
+  overflow-y:auto;
+}
+
+/* Resultados / tipografía */
+.dash .muted{ color:var(--muted); }
+.dash .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.dash .metric{ margin-bottom:10px; }
+.dash .metric span{ display:block; color:var(--muted); margin-bottom:4px; }
+.dash .metric strong{ font-size:1.2rem; color:#111827; }
+.dash .alert{
+  padding:10px 12px; background:#fff7ed; border:1px solid #fdba74;
+  color:#7c2d12; border-radius:12px; margin-bottom:10px; box-shadow: var(--shadow-sm);
+}
+
+/* ===== Responsivo ===== */
+@media (max-width: 1200px){
+  .dash .bar{ grid-template-columns: 1fr 1fr 170px; }
+}
+@media (max-width: 992px){
+  .dash .bar{ grid-template-columns: 1fr; }
+  .dash .actions{ position:static; justify-self:stretch; flex-direction:row; }
+  .dash .actions .btn{ width:auto; flex:1; }
+  .dash .dash__header{ flex-direction: column; align-items: flex-start; gap:8px; }
+}
+@media (max-width: 720px){
+  .dash .grid-2{ grid-template-columns: 1fr; }
+}
+@media (max-width: 460px){
+  .dash .welcome{ width:100%; text-align:center; }
+}
+
+/* Micro-animaciones */
+.dash .btn { will-change: transform, box-shadow; }
