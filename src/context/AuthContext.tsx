@@ -30,29 +30,11 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
     case 'LOGIN_START':
       return { ...state, loading: true, error: null };
     case 'LOGIN_SUCCESS':
-      return {
-        ...state,
-        isAuthenticated: true,
-        user: action.payload,
-        loading: false,
-        error: null
-      };
+      return { ...state, isAuthenticated: true, user: action.payload, loading: false, error: null };
     case 'LOGIN_FAILURE':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        loading: false,
-        error: action.payload
-      };
+      return { ...state, isAuthenticated: false, user: null, loading: false, error: action.payload };
     case 'LOGOUT':
-      return {
-        ...state,
-        isAuthenticated: false,
-        user: null,
-        loading: false,
-        error: null
-      };
+      return { ...state, isAuthenticated: false, user: null, loading: false, error: null };
     case 'REGISTER_START':
       return { ...state, loading: true, error: null };
     case 'REGISTER_SUCCESS':
@@ -64,11 +46,7 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         error: null
       };
     case 'REGISTER_FAILURE':
-      return {
-        ...state,
-        loading: false,
-        error: action.payload
-      };
+      return { ...state, loading: false, error: action.payload };
     default:
       return state;
   }
@@ -81,44 +59,29 @@ const initialState: AuthState = {
   error: null
 };
 
-/**
- * Adaptador: convierte el usuario que viene del backend (.NET)
- *   { id, usuario, email, nombreCompleto, telefono, role, ... }
- * a tu tipo User del front-end:
- *   { id, nickname, email, fullName, phone, role, ... }
- */
+/** Adaptador: BackendUser -> User del front */
 function mapBackendUserToUser(bu: any): User {
   const mapped: Partial<User> = {
     id: bu?.id ?? bu?.userId ?? bu?.guid ?? `user_${Date.now()}`,
     email: bu?.email ?? '',
     phone: bu?.telefono ?? bu?.phone ?? '',
-    nickname: bu?.usuario ?? bu?.username ?? '',
+    nickname: bu?.usuario ?? bu?.username ?? bu?.nickname ?? '',
     fullName: bu?.nombreCompleto ?? bu?.fullName ?? '',
-    role: bu?.role ?? 'analista',
-    // Campos opcionales del modelo local que quizás tengas:
-    // notifications: bu?.notifications,
-    // originalPhoto: bu?.originalPhoto,
-    // processedPhoto: bu?.processedPhoto,
-    // registrationDate: bu?.registrationDate ?? new Date().toISOString(),
-    // faceData: bu?.faceData,
-    // qrCode: bu?.qrCode,
+    role: bu?.role ?? 'analista'
   };
-  // Forzamos a User porque en tu modelo algunos campos pueden ser opcionales
   return mapped as User;
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authState, dispatch] = useReducer(authReducer, initialState);
 
-  // Al montar, intenta restaurar sesión usando el token real
   useEffect(() => {
     const restore = async () => {
       const token = localStorage.getItem('auth_token');
       if (token) {
         try {
-          const backendUser = await AuthAPI.me(token); // puede fallar si no tienes /me implementado
+          const backendUser = await AuthAPI.me(token); // si no hay /me, esto fallará
           const profile = mapBackendUserToUser(backendUser);
-
           const session: UserSession = {
             user: profile,
             token,
@@ -129,13 +92,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           dispatch({ type: 'LOGIN_SUCCESS', payload: profile });
           return;
         } catch {
-          // token inválido/expirado o endpoint /me no existe
           localStorage.removeItem('auth_token');
           localStorage.removeItem('authvision_session');
         }
       }
 
-      // Compatibilidad: sesión previa local si no hay backend disponible
       const sessionStr = localStorage.getItem('authvision_session');
       if (sessionStr) {
         try {
@@ -150,11 +111,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     };
-
     restore();
   }, []);
 
-  // LOGIN real contra .NET (Railway)
   const login = async (userOrEmail: string, password: string): Promise<boolean> => {
     dispatch({ type: 'LOGIN_START' });
     try {
@@ -162,7 +121,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = mapBackendUserToUser(backendUser);
 
       localStorage.setItem('auth_token', token);
-
       const session: UserSession = {
         user,
         token,
@@ -174,15 +132,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dispatch({ type: 'LOGIN_SUCCESS', payload: user });
       return true;
     } catch (err: any) {
-      dispatch({
-        type: 'LOGIN_FAILURE',
-        payload: err?.message || 'Credenciales incorrectas'
-      });
+      dispatch({ type: 'LOGIN_FAILURE', payload: err?.message || 'Credenciales incorrectas' });
       return false;
     }
   };
 
-  // Stubs (conéctalos a tu backend cuando tengas endpoints)
   const loginWithFace = async (): Promise<boolean> => {
     dispatch({ type: 'LOGIN_START' });
     try {
@@ -207,26 +161,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // REGISTER real contra .NET (Railway) con auto-login
   const register = async (userData: any): Promise<boolean> => {
     dispatch({ type: 'REGISTER_START' });
     try {
       await AuthAPI.register(userData);
 
-      // auto-login usando email o nickname/usuario + password
       const identifier = userData.email || userData.nickname || userData.usuario;
       const ok = await login(identifier, userData.password);
 
       if (!ok) {
-        // si tu backend no permite login inmediato, igual marcar éxito del registro
         dispatch({ type: 'REGISTER_SUCCESS', payload: null });
       }
       return true;
     } catch (err: any) {
-      dispatch({
-        type: 'REGISTER_FAILURE',
-        payload: err?.message || 'Error al registrar usuario'
-      });
+      dispatch({ type: 'REGISTER_FAILURE', payload: err?.message || 'Error al registrar usuario' });
       return false;
     }
   };
@@ -237,7 +185,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dispatch({ type: 'LOGOUT' });
   };
 
-  // Placeholder (conéctalo a tu endpoint cuando esté listo)
   const resetPassword = async (email: string): Promise<boolean> => {
     try {
       await new Promise((r) => setTimeout(r, 600));
@@ -250,15 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{
-        authState,
-        login,
-        loginWithFace,
-        loginWithQR,
-        register,
-        logout,
-        resetPassword
-      }}
+      value={{ authState, login, loginWithFace, loginWithQR, register, logout, resetPassword }}
     >
       {children}
     </AuthContext.Provider>
