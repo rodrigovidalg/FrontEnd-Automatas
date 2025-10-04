@@ -1,4 +1,5 @@
-// Definir FilterOption directamente aquí para evitar problemas de importación
+// src/utils/constants.ts
+
 export interface FilterOption {
   name: string;
   value: string;
@@ -16,13 +17,12 @@ export const COLORS = {
 };
 
 export const API_ROUTES = {
-  LOGIN: '/api/auth/login',
-  REGISTER: '/api/auth/register',
-  FACE_LOGIN: '/api/auth/face-login',
-  QR_LOGIN: '/api/auth/qr-login',
-  RESET_PASSWORD: '/api/auth/reset-password'
-};
-
+  LOGIN: '/api/Auth/login',      // <— coincide con Swagger
+  REGISTER: '/api/Auth/register', // si tu register es /api/Auth/register
+  FACE_LOGIN: '/api/Auth/face-login',
+  QR_LOGIN: '/api/Auth/qr-login',
+  RESET_PASSWORD: '/api/Auth/reset-password'
+} as const;
 
 export const FILTERS: FilterOption[] = [
   { name: 'Normal', value: 'normal', icon: '📷' },
@@ -31,6 +31,4 @@ export const FILTERS: FilterOption[] = [
   { name: 'Sepia', value: 'sepia', icon: '🟤' }
 ];
 
-export const EMOJIS = [
-  '😊', '🎉', '❤️', '⭐', '🚀', '🌟', '💫', '🎈', '🎭', '🦄', '🌈', '🔥', '✨'
-];
+export const EMOJIS = ['😊','🎉','❤️','⭐','🚀','🌟','💫','🎈','🎭','🦄','🌈','🔥','✨'];
