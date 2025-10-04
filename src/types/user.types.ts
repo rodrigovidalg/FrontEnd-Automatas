@@ -2,12 +2,13 @@ export interface User {
   id: string;
   email: string;
   phone: string;
-  birthdate: string;
+  // birthdate eliminado
   nickname: string;
+  fullName: string;
   passwordHash: string;
-  notifications: boolean;
-  originalPhoto?: string;
-  processedPhoto?: string;
+  notifications: 'email' | 'whatsapp' | 'both';
+  originalPhoto: string;
+  processedPhoto: string;
   registrationDate: string;
   role: 'analista' | 'admin' | 'user';
   faceData?: string;

@@ -3,7 +3,6 @@ import { useAuth } from '../../context/AuthContext';
 import { validatePassword } from '../../utils/validation';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
-import Select from '../UI/Select'; // Importamos el componente Select
 import ProcessStatus from '../UI/ProcessStatus';
 
 interface RegisterFormProps {
@@ -12,10 +11,12 @@ interface RegisterFormProps {
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
   const [formData, setFormData] = useState({
-    email: '',
-    phone: '',
     nickname: '',
+    email: '',
+    fullName: '',
     password: '',
+    phone: '',
+    // birthdate eliminado
     notifications: 'email' as 'email' | 'whatsapp' | 'both'
   });
   
@@ -49,7 +50,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     // Validar formulario
     for (const [key, value] of Object.entries(formData)) {
       if (!value) {
-        alert(`⚠️ Por favor completa el campo: ${key}`);
+        alert(`⚠️ Por favor completa el campo: ${key === 'fullName' ? 'nombre completo' : key}`);
         return;
       }
     }
@@ -84,6 +85,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       setStatusTitle('Completado');
       setStatusDescription('Registro exitoso!');
       setStatusProgress(100);
+      // ✅ Mensaje de confirmación
+      alert('Registro exitoso');
+      // ✅ Limpiar los campos del formulario
+      setFormData({
+        nickname: '',
+        email: '',
+        fullName: '',
+        password: '',
+        phone: '',
+        notifications: 'email'
+      });
+      // Opcional: reiniciar reCAPTCHA y barra de estado
+      setRecaptchaVerified(false);
       setTimeout(() => setShowStatus(false), 2000);
     } else {
       setStatusTitle('Error');
@@ -122,26 +136,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         <p>Únete a la próxima generación de autenticación</p>
       </div>
       
-      <Input
-        id="regEmail"
-        type="email"
-        placeholder="tu@email.com"
-        value={formData.email}
-        onChange={handleChange}
-        name="email"
-        label="Email"
-      />
-      
-      <Input
-        id="regPhone"
-        type="tel"
-        placeholder="+502 0000-0000"
-        value={formData.phone}
-        onChange={handleChange}
-        name="phone"
-        label="Teléfono"
-      />
-  
+      {/* Inputs en el orden solicitado */}
       <Input
         id="regNickname"
         type="text"
@@ -149,7 +144,27 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         value={formData.nickname}
         onChange={handleChange}
         name="nickname"
-        label="Nickname"
+        label="Usuario"
+      />
+      
+      <Input
+        id="regEmail"
+        type="email"
+        placeholder="tu@email.com"
+        value={formData.email}
+        onChange={handleChange}
+        name="email"
+        label="Correo"
+      />
+      
+      <Input
+        id="regFullName"
+        type="text"
+        placeholder="Tu nombre completo"
+        value={formData.fullName}
+        onChange={handleChange}
+        name="fullName"
+        label="Nombre Completo"
       />
       
       <div className="form-group">
@@ -168,6 +183,16 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         </div>
       </div>
       
+      <Input
+        id="regPhone"
+        type="tel"
+        placeholder="+502 0000-0000"
+        value={formData.phone}
+        onChange={handleChange}
+        name="phone"
+        label="Teléfono"
+      />
+      {/*
       <Select
         id="regNotifications"
         value={formData.notifications}
@@ -178,15 +203,25 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         <option value="email">Solo Email</option>
         <option value="whatsapp">Solo WhatsApp</option>
         <option value="both">Ambos</option>
-      </Select>
-      
-      <Button 
-        type="button"
-        variant="advanced" 
-        onClick={onCameraCapture}
-      >
-        📸 Continuar con Foto
-      </Button>
+      </Select> 
+      */}
+      {/* Botones de registro */}
+      <div className="register-buttons">
+        <Button 
+          type="submit"
+          variant="primary"
+        >
+          🚀 Registrarse Ahora
+        </Button>
+        
+        <Button 
+          type="button"
+          variant="advanced" 
+          onClick={onCameraCapture}
+        >
+          📸 Registrarse con Foto
+        </Button>
+      </div>
       
       {/* reCAPTCHA para Registro */}
       <div className="recaptcha-container">

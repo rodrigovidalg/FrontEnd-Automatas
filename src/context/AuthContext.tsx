@@ -203,8 +203,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: generateUserId(),
         email: userData.email,
         phone: userData.phone,
-        birthdate: userData.birthdate,
+        // birthdate eliminado
         nickname: userData.nickname,
+        fullName: userData.fullName,
         passwordHash: hashPassword(userData.password),
         notifications: userData.notifications,
         originalPhoto: userData.originalPhoto,

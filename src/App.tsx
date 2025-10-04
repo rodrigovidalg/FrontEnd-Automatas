@@ -6,12 +6,12 @@ import RegisterForm from './components/Auth/RegisterForm';
 import CameraModal from './components/Camera/CameraModal';
 import FaceLoginModal from './components/Modals/FaceLoginModal';
 import QRScannerModal from './components/Modals/QRScannerModal';
-import Dashboard from './components/Dashboard/Dashboard';
 import FloatingElements from './components/UI/FloatingElements';
 import './styles/global.css';
 import './styles/animations.css';
 
 const AppContent: React.FC = () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { authState } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -46,10 +46,6 @@ const AppContent: React.FC = () => {
       alert(`Se ha enviado un enlace de recuperación a ${email}`);
     }
   };
-
-  if (authState.isAuthenticated && authState.user) {
-    return <Dashboard />;
-  }
 
   return (
     <div className="main-container">
