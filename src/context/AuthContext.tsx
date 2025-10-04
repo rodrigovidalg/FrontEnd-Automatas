@@ -1,8 +1,8 @@
+// src/context/AuthContext.tsx
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { User, UserSession } from '../types/user.types';
 import { AuthState } from '../types/auth.types';
-import { useUsers } from '../hooks/useLocalStorage';
-import { hashPassword, generateToken } from '../utils/crypto';
+import * as AuthAPI from '../services/authService';
 
 interface AuthContextType {
   authState: AuthState;
@@ -22,7 +22,7 @@ type AuthAction =
   | { type: 'LOGIN_FAILURE'; payload: string }
   | { type: 'LOGOUT' }
   | { type: 'REGISTER_START' }
-  | { type: 'REGISTER_SUCCESS'; payload: User }
+  | { type: 'REGISTER_SUCCESS'; payload: User | null }
   | { type: 'REGISTER_FAILURE'; payload: string };
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
@@ -30,46 +30,44 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
     case 'LOGIN_START':
       return { ...state, loading: true, error: null };
     case 'LOGIN_SUCCESS':
-      return { 
-        ...state, 
-        isAuthenticated: true, 
-        user: action.payload, 
-        loading: false, 
-        error: null 
+      return {
+        ...state,
+        isAuthenticated: true,
+        user: action.payload,
+        loading: false,
+        error: null
       };
     case 'LOGIN_FAILURE':
-      return { 
-        ...state, 
-        isAuthenticated: false, 
-        user: null, 
-        loading: false, 
-        error: action.payload 
+      return {
+        ...state,
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: action.payload
       };
     case 'LOGOUT':
-      return { 
-        ...state, 
-        isAuthenticated: false, 
-        user: null, 
-        loading: false, 
-        error: null 
+      return {
+        ...state,
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: null
       };
     case 'REGISTER_START':
       return { ...state, loading: true, error: null };
     case 'REGISTER_SUCCESS':
-      return { 
-        ...state, 
-        isAuthenticated: true, 
-        user: action.payload, 
-        loading: false, 
-        error: null 
+      return {
+        ...state,
+        isAuthenticated: action.payload ? true : state.isAuthenticated,
+        user: action.payload ?? state.user,
+        loading: false,
+        error: null
       };
     case 'REGISTER_FAILURE':
-      return { 
-        ...state, 
-        isAuthenticated: false, 
-        user: null, 
-        loading: false, 
-        error: action.payload 
+      return {
+        ...state,
+        loading: false,
+        error: action.payload
       };
     default:
       return state;
@@ -83,204 +81,185 @@ const initialState: AuthState = {
   error: null
 };
 
+/**
+ * Adaptador: convierte el usuario que viene del backend (.NET)
+ *   { id, usuario, email, nombreCompleto, telefono, role, ... }
+ * a tu tipo User del front-end:
+ *   { id, nickname, email, fullName, phone, role, ... }
+ */
+function mapBackendUserToUser(bu: any): User {
+  const mapped: Partial<User> = {
+    id: bu?.id ?? bu?.userId ?? bu?.guid ?? `user_${Date.now()}`,
+    email: bu?.email ?? '',
+    phone: bu?.telefono ?? bu?.phone ?? '',
+    nickname: bu?.usuario ?? bu?.username ?? '',
+    fullName: bu?.nombreCompleto ?? bu?.fullName ?? '',
+    role: bu?.role ?? 'analista',
+    // Campos opcionales del modelo local que quizás tengas:
+    // notifications: bu?.notifications,
+    // originalPhoto: bu?.originalPhoto,
+    // processedPhoto: bu?.processedPhoto,
+    // registrationDate: bu?.registrationDate ?? new Date().toISOString(),
+    // faceData: bu?.faceData,
+    // qrCode: bu?.qrCode,
+  };
+  // Forzamos a User porque en tu modelo algunos campos pueden ser opcionales
+  return mapped as User;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authState, dispatch] = useReducer(authReducer, initialState);
-  const { users, addUser, findUser, findUserByNickname } = useUsers();
-  
+
+  // Al montar, intenta restaurar sesión usando el token real
   useEffect(() => {
-    const session = localStorage.getItem('authvision_session');
-    if (session) {
-      try {
-        const sessionData: UserSession = JSON.parse(session);
-        if (new Date(sessionData.expiresAt) > new Date()) {
-          dispatch({ type: 'LOGIN_SUCCESS', payload: sessionData.user });
-        } else {
+    const restore = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const backendUser = await AuthAPI.me(token); // puede fallar si no tienes /me implementado
+          const profile = mapBackendUserToUser(backendUser);
+
+          const session: UserSession = {
+            user: profile,
+            token,
+            loginMethod: 'password',
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+          };
+          localStorage.setItem('authvision_session', JSON.stringify(session));
+          dispatch({ type: 'LOGIN_SUCCESS', payload: profile });
+          return;
+        } catch {
+          // token inválido/expirado o endpoint /me no existe
+          localStorage.removeItem('auth_token');
           localStorage.removeItem('authvision_session');
         }
-      } catch (error) {
-        console.error('Error parsing session:', error);
-        localStorage.removeItem('authvision_session');
       }
-    }
+
+      // Compatibilidad: sesión previa local si no hay backend disponible
+      const sessionStr = localStorage.getItem('authvision_session');
+      if (sessionStr) {
+        try {
+          const sessionData: UserSession = JSON.parse(sessionStr);
+          if (new Date(sessionData.expiresAt) > new Date()) {
+            dispatch({ type: 'LOGIN_SUCCESS', payload: sessionData.user });
+          } else {
+            localStorage.removeItem('authvision_session');
+          }
+        } catch {
+          localStorage.removeItem('authvision_session');
+        }
+      }
+    };
+
+    restore();
   }, []);
-  
-  const login = async (user: string, password: string): Promise<boolean> => {
+
+  // LOGIN real contra .NET (Railway)
+  const login = async (userOrEmail: string, password: string): Promise<boolean> => {
     dispatch({ type: 'LOGIN_START' });
-    
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const foundUser = findUser(user) || findUserByNickname(user);
-      
-      if (foundUser && foundUser.passwordHash === hashPassword(password)) {
-        const session: UserSession = {
-          user: foundUser,
-          token: generateToken(),
-          loginMethod: 'password',
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-        };
-        
-        localStorage.setItem('authvision_session', JSON.stringify(session));
-        dispatch({ type: 'LOGIN_SUCCESS', payload: foundUser });
-        return true;
-      } else {
-        dispatch({ type: 'LOGIN_FAILURE', payload: 'Credenciales incorrectas' });
-        return false;
-      }
-    } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE', payload: 'Error al iniciar sesión' });
-      return false;
-    }
-  };
-  
-  const loginWithFace = async (): Promise<boolean> => {
-    dispatch({ type: 'LOGIN_START' });
-    
-    try {
-      // Simulate face recognition
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      if (users.length > 0) {
-        const randomUser = users[Math.floor(Math.random() * users.length)];
-        const session: UserSession = {
-          user: randomUser,
-          token: generateToken(),
-          loginMethod: 'facial',
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        };
-        
-        localStorage.setItem('authvision_session', JSON.stringify(session));
-        dispatch({ type: 'LOGIN_SUCCESS', payload: randomUser });
-        return true;
-      } else {
-        dispatch({ type: 'LOGIN_FAILURE', payload: 'No hay usuarios registrados con reconocimiento facial' });
-        return false;
-      }
-    } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE', payload: 'Error en el reconocimiento facial' });
-      return false;
-    }
-  };
-  
-  const loginWithQR = async (): Promise<boolean> => {
-    dispatch({ type: 'LOGIN_START' });
-    
-    try {
-      // Simulate QR scanning
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      if (users.length > 0) {
-        const randomUser = users[Math.floor(Math.random() * users.length)];
-        const session: UserSession = {
-          user: randomUser,
-          token: generateToken(),
-          loginMethod: 'qr',
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        };
-        
-        localStorage.setItem('authvision_session', JSON.stringify(session));
-        dispatch({ type: 'LOGIN_SUCCESS', payload: randomUser });
-        return true;
-      } else {
-        dispatch({ type: 'LOGIN_FAILURE', payload: 'Código QR no válido' });
-        return false;
-      }
-    } catch (error) {
-      dispatch({ type: 'LOGIN_FAILURE', payload: 'Error al escanear código QR' });
-      return false;
-    }
-  };
-  
-  const register = async (userData: any): Promise<boolean> => {
-    dispatch({ type: 'REGISTER_START' });
-    
-    try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      const newUser: User = {
-        id: generateUserId(),
-        email: userData.email,
-        phone: userData.phone,
-        // birthdate eliminado
-        nickname: userData.nickname,
-        fullName: userData.fullName,
-        passwordHash: hashPassword(userData.password),
-        notifications: userData.notifications,
-        originalPhoto: userData.originalPhoto,
-        processedPhoto: userData.processedPhoto,
-        registrationDate: new Date().toISOString(),
-        role: 'analista',
-        faceData: 'simulated_face_encoding_' + Math.random().toString(36),
-        qrCode: generateQRCode(userData)
-      };
-      
-      addUser(newUser);
-      
+      const { token, user: backendUser } = await AuthAPI.login(userOrEmail, password);
+      const user = mapBackendUserToUser(backendUser);
+
+      localStorage.setItem('auth_token', token);
+
       const session: UserSession = {
-        user: newUser,
-        token: generateToken(),
+        user,
+        token,
         loginMethod: 'password',
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
       };
-      
       localStorage.setItem('authvision_session', JSON.stringify(session));
-      dispatch({ type: 'REGISTER_SUCCESS', payload: newUser });
+
+      dispatch({ type: 'LOGIN_SUCCESS', payload: user });
       return true;
-    } catch (error) {
-      dispatch({ type: 'REGISTER_FAILURE', payload: 'Error al registrar usuario' });
+    } catch (err: any) {
+      dispatch({
+        type: 'LOGIN_FAILURE',
+        payload: err?.message || 'Credenciales incorrectas'
+      });
       return false;
     }
   };
-  
+
+  // Stubs (conéctalos a tu backend cuando tengas endpoints)
+  const loginWithFace = async (): Promise<boolean> => {
+    dispatch({ type: 'LOGIN_START' });
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      dispatch({ type: 'LOGIN_FAILURE', payload: 'Login por rostro no implementado aún' });
+      return false;
+    } catch (err: any) {
+      dispatch({ type: 'LOGIN_FAILURE', payload: err?.message || 'Error en login facial' });
+      return false;
+    }
+  };
+
+  const loginWithQR = async (): Promise<boolean> => {
+    dispatch({ type: 'LOGIN_START' });
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      dispatch({ type: 'LOGIN_FAILURE', payload: 'Login por QR no implementado aún' });
+      return false;
+    } catch (err: any) {
+      dispatch({ type: 'LOGIN_FAILURE', payload: err?.message || 'Error en login QR' });
+      return false;
+    }
+  };
+
+  // REGISTER real contra .NET (Railway) con auto-login
+  const register = async (userData: any): Promise<boolean> => {
+    dispatch({ type: 'REGISTER_START' });
+    try {
+      await AuthAPI.register(userData);
+
+      // auto-login usando email o nickname/usuario + password
+      const identifier = userData.email || userData.nickname || userData.usuario;
+      const ok = await login(identifier, userData.password);
+
+      if (!ok) {
+        // si tu backend no permite login inmediato, igual marcar éxito del registro
+        dispatch({ type: 'REGISTER_SUCCESS', payload: null });
+      }
+      return true;
+    } catch (err: any) {
+      dispatch({
+        type: 'REGISTER_FAILURE',
+        payload: err?.message || 'Error al registrar usuario'
+      });
+      return false;
+    }
+  };
+
   const logout = () => {
+    localStorage.removeItem('auth_token');
     localStorage.removeItem('authvision_session');
     dispatch({ type: 'LOGOUT' });
   };
-  
+
+  // Placeholder (conéctalo a tu endpoint cuando esté listo)
   const resetPassword = async (email: string): Promise<boolean> => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const user = findUser(email);
-      if (user) {
-        // In a real app, this would send an email or WhatsApp message
-        console.log(`Password reset link sent to ${email}`);
-        return true;
-      } else {
-        return false;
-      }
-    } catch (error) {
-      console.error('Error resetting password:', error);
+      await new Promise((r) => setTimeout(r, 600));
+      console.log(`Reset password solicitado para: ${email}`);
+      return true;
+    } catch {
       return false;
     }
   };
-  
-  // Helper functions
-  const generateUserId = (): string => {
-    return 'AV_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  };
-  
-  const generateQRCode = (userData: any): string => {
-    return JSON.stringify({
-      id: generateUserId(),
-      email: userData.email,
-      timestamp: Date.now()
-    });
-  };
-  
+
   return (
-    <AuthContext.Provider value={{
-      authState,
-      login,
-      loginWithFace,
-      loginWithQR,
-      register,
-      logout,
-      resetPassword
-    }}>
+    <AuthContext.Provider
+      value={{
+        authState,
+        login,
+        loginWithFace,
+        loginWithQR,
+        register,
+        logout,
+        resetPassword
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

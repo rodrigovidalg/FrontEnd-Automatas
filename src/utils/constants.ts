@@ -15,13 +15,14 @@ export const COLORS = {
   secondaryAccent: '#4ecdc4'
 };
 
-export const API_ENDPOINTS = {
+export const API_ROUTES = {
   LOGIN: '/api/auth/login',
   REGISTER: '/api/auth/register',
   FACE_LOGIN: '/api/auth/face-login',
   QR_LOGIN: '/api/auth/qr-login',
   RESET_PASSWORD: '/api/auth/reset-password'
 };
+
 
 export const FILTERS: FilterOption[] = [
   { name: 'Normal', value: 'normal', icon: '📷' },
