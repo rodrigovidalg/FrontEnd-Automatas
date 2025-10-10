@@ -4,6 +4,7 @@ import { validatePassword } from '../../utils/validation';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
 import ProcessStatus from '../UI/ProcessStatus';
+import Recaptcha from '../UI/Recaptcha';
 
 interface RegisterFormProps {
   onCameraCapture: () => void;
@@ -15,26 +16,35 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     email: '',
     fullName: '',
     password: '',
+    confirmPassword: '',
     phone: '',
-    // birthdate eliminado
     notifications: 'email' as 'email' | 'whatsapp' | 'both'
   });
   
+  // --- Estados de Errores y Validación ---
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  // NUEVO: Estado para errores generales del formulario
+  const [formError, setFormError] = useState('');
+
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [recaptchaVerified, setRecaptchaVerified] = useState(false);
+  
   const [showStatus, setShowStatus] = useState(false);
   const [statusTitle, setStatusTitle] = useState('');
   const [statusDescription, setStatusDescription] = useState('');
   const [statusProgress, setStatusProgress] = useState(0);
   
   const { register } = useAuth();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Limpiar errores al escribir
+    if (name === 'email') setEmailError('');
+    if (name === 'password' || name === 'confirmPassword') setPasswordError('');
+    if (formError) setFormError(''); // Limpiar error general al interactuar
   };
 
   useEffect(() => {
@@ -44,20 +54,51 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     }
   }, [formData.password]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (formData.confirmPassword && formData.password !== formData.confirmPassword) {
+      setPasswordError('Las contraseñas no coinciden.');
+    } else {
+      setPasswordError('');
+    }
+  }, [formData.password, formData.confirmPassword]);
+
+  // --- MEJORA: Función de validación centralizada ---
+  const validateForm = () => {
+    let isValid = true;
+    setEmailError('');
+    setPasswordError('');
+    setFormError('');
+
+    if (!emailRegex.test(formData.email)) {
+      setEmailError('Por favor, introduce un correo electrónico válido.');
+      isValid = false;
+    }
     
-    // Validar formulario
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordError('Las contraseñas no coinciden.');
+      isValid = false;
+    }
+
     for (const [key, value] of Object.entries(formData)) {
-      if (!value) {
-        alert(`⚠️ Por favor completa el campo: ${key === 'fullName' ? 'nombre completo' : key}`);
-        return;
+      if (key !== 'confirmPassword' && !value) {
+        setFormError(`⚠️ Por favor completa el campo: ${key === 'fullName' ? 'nombre completo' : key}`);
+        isValid = false;
       }
     }
     
     if (!recaptchaVerified) {
-      alert('⚠️ Por favor completa la verificación reCAPTCHA');
-      return;
+      setFormError('⚠️ Por favor completa la verificación reCAPTCHA');
+      isValid = false;
+    }
+
+    return isValid;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return; // Si la validación falla, detener aquí
     }
     
     setShowStatus(true);
@@ -65,16 +106,15 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     setStatusDescription('Verificando datos...');
     setStatusProgress(20);
     
-    // Simular validación
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     setStatusTitle('Procesando');
     setStatusDescription('Creando cuenta...');
     setStatusProgress(50);
     
-    // En un entorno real, aquí se capturaría la foto
     const userData = {
       ...formData,
+      confirmPassword: undefined, 
       originalPhoto: 'data:image/jpeg;base64,simulated_original_photo',
       processedPhoto: 'data:image/jpeg;base64,simulated_processed_photo'
     };
@@ -85,41 +125,29 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       setStatusTitle('Completado');
       setStatusDescription('Registro exitoso!');
       setStatusProgress(100);
-      // ✅ Mensaje de confirmación
-      alert('Registro exitoso');
-      // ✅ Limpiar los campos del formulario
-      setFormData({
-        nickname: '',
-        email: '',
-        fullName: '',
-        password: '',
-        phone: '',
-        notifications: 'email'
-      });
-      // Opcional: reiniciar reCAPTCHA y barra de estado
-      setRecaptchaVerified(false);
-      setTimeout(() => setShowStatus(false), 2000);
+      // Limpiar formulario después de un registro exitoso
+      setTimeout(() => {
+        setFormData({
+          nickname: '', email: '', fullName: '', password: '', confirmPassword: '', phone: '', notifications: 'email'
+        });
+        setRecaptchaVerified(false);
+      }, 1500);
     } else {
       setStatusTitle('Error');
-      setStatusDescription('Error al registrar usuario');
+      setStatusDescription('No se pudo completar el registro. Inténtalo de nuevo.');
       setStatusProgress(0);
-      setTimeout(() => setShowStatus(false), 3000);
+      setFormError('Ocurrió un error en el servidor. Por favor, inténtalo más tarde.');
     }
+    
+    setTimeout(() => setShowStatus(false), 3000);
   };
 
   const handleRecaptchaVerified = () => {
     setRecaptchaVerified(true);
-    setStatusTitle('Verificado');
-    setStatusDescription('reCAPTCHA completado correctamente');
-    setStatusProgress(50);
-    setShowStatus(true);
-    setTimeout(() => setShowStatus(false), 2000);
-  };
-
-  const simulateRecaptcha = () => {
-    setTimeout(() => {
-      handleRecaptchaVerified();
-    }, 1500);
+    // Limpiar cualquier error de reCAPTCHA previo
+    if (formError.includes('reCAPTCHA')) {
+      setFormError('');
+    }
   };
 
   const getPasswordStrengthClass = () => {
@@ -130,13 +158,15 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} noValidate>
       <div className="form-title">
         <h2>Crear Cuenta</h2>
         <p>Únete a la próxima generación de autenticación</p>
       </div>
+
+      {/* NUEVO: Banner para errores generales del formulario */}
+      {formError && <div className="form-error-banner">{formError}</div>}
       
-      {/* Inputs en el orden solicitado */}
       <Input
         id="regNickname"
         type="text"
@@ -156,6 +186,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         name="email"
         label="Correo"
       />
+      {/* El mensaje de error se muestra aquí */}
+      {emailError && <p className="error-message">{emailError}</p>}
       
       <Input
         id="regFullName"
@@ -182,6 +214,20 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
           <div className={`password-strength-fill ${getPasswordStrengthClass()}`}></div>
         </div>
       </div>
+
+      <div className="form-group">
+        <label className="form-label">Confirmar Contraseña</label>
+        <input
+          id="regConfirmPassword"
+          type="password"
+          className={`form-input ${passwordError ? 'input-error' : ''}`}
+          placeholder="Repite tu contraseña"
+          value={formData.confirmPassword}
+          onChange={handleChange}
+          name="confirmPassword"
+        />
+        {passwordError && <p className="error-message">{passwordError}</p>}
+      </div>
       
       <Input
         id="regPhone"
@@ -192,20 +238,12 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         name="phone"
         label="Teléfono"
       />
-      {/*
-      <Select
-        id="regNotifications"
-        value={formData.notifications}
-        onChange={handleChange}
-        name="notifications"
-        label="Notificaciones"
-      >
-        <option value="email">Solo Email</option>
-        <option value="whatsapp">Solo WhatsApp</option>
-        <option value="both">Ambos</option>
-      </Select> 
-      */}
-      {/* Botones de registro */}
+
+      <Recaptcha 
+        onVerified={handleRecaptchaVerified} 
+        value={recaptchaVerified} 
+      />
+      
       <div className="register-buttons">
         <Button 
           type="submit"
@@ -221,24 +259,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         >
           📸 Registrarse con Foto
         </Button>
-      </div>
-      
-      {/* reCAPTCHA para Registro */}
-      <div className="recaptcha-container">
-        <div className="recaptcha-header">🛡️ Verificación de Seguridad</div>
-        <div className="recaptcha-wrapper">
-          {/* En un entorno real, usaría el reCAPTCHA real */}
-          <button 
-            type="button"
-            className="recaptcha-demo-btn" 
-            onClick={simulateRecaptcha}
-          >
-            🤖 <span>Verificar que soy humano</span>
-          </button>
-        </div>
-        <div className={`recaptcha-status ${recaptchaVerified ? 'verified' : ''}`}>
-          Verificación humana completada
-        </div>
       </div>
       
       <ProcessStatus
