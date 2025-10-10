@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useNavigate } from 'react-router-dom'; // ⬅️ NUEVO
+import { useNavigate } from 'react-router-dom';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
 import ProcessStatus from '../UI/ProcessStatus';
@@ -16,8 +16,10 @@ const LoginForm: React.FC<LoginFormProps> = ({
   onQRLogin, 
   onPasswordReset 
 }) => {
+  const [mode, setMode] = useState<'login' | 'reset'>('login');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
   const [recaptchaVerified, setRecaptchaVerified] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [statusTitle, setStatusTitle] = useState('');
@@ -25,7 +27,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [statusProgress, setStatusProgress] = useState(0);
   
   const { login } = useAuth();
-  const navigate = useNavigate();                // ⬅️ NUEVO
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,9 +54,6 @@ const LoginForm: React.FC<LoginFormProps> = ({
       setStatusDescription('Login exitoso, redirigiendo...');
       setStatusProgress(100);
 
-      // ⬅️ REDIRECCIÓN AL DASHBOARD SOLO SI EL LOGIN FUE EXITOSO
-      // Si quieres ver el estado unos ms antes de salir, descomenta el setTimeout:
-      // setTimeout(() => navigate('/dashboard', { replace: true }), 300);
       navigate('/dashboard', { replace: true });
       return;
     } else {
@@ -63,6 +62,33 @@ const LoginForm: React.FC<LoginFormProps> = ({
       setStatusProgress(0);
       setTimeout(() => setShowStatus(false), 3000);
     }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!resetEmail) {
+      alert('⚠️ Por favor ingresa tu email');
+      return;
+    }
+
+    setShowStatus(true);
+    setStatusTitle('Enviando');
+    setStatusDescription('Enviando email de recuperación...');
+    setStatusProgress(50);
+    
+    setTimeout(() => {
+      setStatusTitle('Éxito');
+      setStatusDescription('Email de recuperación enviado. Revisa tu bandeja de entrada.');
+      setStatusProgress(100);
+      
+      setTimeout(() => {
+        setMode('login');
+        setResetEmail('');
+        setShowStatus(false);
+        setRecaptchaVerified(false);
+      }, 2000);
+    }, 1500);
   };
 
   const handleRecaptchaVerified = () => {
@@ -81,74 +107,145 @@ const LoginForm: React.FC<LoginFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Input
-        id="loginUser"
-        type="text"
-        placeholder="Ingrese su usuario o email"
-        value={user}
-        onChange={(e) => setUser(e.target.value)}
-        label="Usuario o Email"
-        name="loginUser"
-      />
-      
-      <Input
-        id="loginPassword"
-        type="password"
-        placeholder="Ingrese su contraseña"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        label="Contraseña"
-        name="loginPassword"
-      />
-      
-      <Button type="submit" variant="primary">
-        Iniciar Sesión
-      </Button>
-      
-      {/* reCAPTCHA para Login */}
-      <div className="recaptcha-container">
-        <div className="recaptcha-header">🛡️ Verificación de Seguridad</div>
-        <div className="recaptcha-wrapper">
-          {/* En un entorno real, usaría el reCAPTCHA real */}
+    <>
+      {mode === 'login' ? (
+        <form onSubmit={handleSubmit}>
+          {/* Logo de la Universidad */}
+          <div className="university-logo-container">
+            <div className="logo-wrapper">
+              <div className="logo-circle">
+                <img 
+                  src="/assets/umg-logo.png"
+                  alt="Logo de la Universidad Mariano Gálvez" 
+                  className="logo-image"
+                />
+              </div>
+              <h3 className="university-name">Universidad Mariano Gálvez</h3>
+            </div>
+          </div>
+
+          <Input
+            id="loginUser"
+            type="text"
+            placeholder="Ingrese su usuario o email"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            label="Usuario o Email"
+            name="loginUser"
+          />
+          
+          <Input
+            id="loginPassword"
+            type="password"
+            placeholder="Ingrese su contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            label="Contraseña"
+            name="loginPassword"
+          />
+          
           <button 
             type="button"
-            className="recaptcha-demo-btn" 
-            onClick={simulateRecaptcha}
+            className="forgot-password-link"
+            onClick={() => setMode('reset')}
           >
-            🤖 <span>Verificar que soy humano</span>
+            ¿Olvidaste tu contraseña?
           </button>
-        </div>
-        <div className={`recaptcha-status ${recaptchaVerified ? 'verified' : ''}`}>
-          Verificación humana completada
-        </div>
-      </div>
-      
-      <div className="divider"><span>O continuar con</span></div>
-      
-      <Button 
-        type="button"
-        variant="advanced" 
-        onClick={onFaceLogin}
-      >
-        🤖 Reconocimiento Facial
-      </Button>
-      
-      <Button 
-        type="button"
-        variant="secondary" 
-        onClick={onQRLogin}
-      >
-        📱 Código QR
-      </Button>
-      
-      <Button 
-        type="button"
-        variant="secondary" 
-        onClick={onPasswordReset}
-      >
-        🔄 Recuperar Contraseña
-      </Button>
+
+          {/* reCAPTCHA antes del botón de inicio de sesión */}
+          <div className="recaptcha-container">
+            <div className="recaptcha-header">🛡️ Verificación de Seguridad</div>
+            <div className="recaptcha-wrapper">
+              <button 
+                type="button"
+                className={`recaptcha-demo-btn ${recaptchaVerified ? 'verified' : ''}`}
+                onClick={simulateRecaptcha}
+                disabled={recaptchaVerified}
+              >
+                {recaptchaVerified ? '✅' : '🤖'} 
+                <span>{recaptchaVerified ? 'Verificado correctamente' : 'Verificar que soy humano'}</span>
+              </button>
+            </div>
+            {recaptchaVerified && (
+              <div className="recaptcha-status verified">
+                ✓ Verificación completada
+              </div>
+            )}
+          </div>
+          
+          <Button 
+            type="submit" 
+            variant="primary"
+            disabled={!recaptchaVerified}
+          >
+            Iniciar Sesión
+          </Button>
+          
+          <div className="divider"><span>O continuar con</span></div>
+          
+          <Button 
+            type="button"
+            variant="advanced" 
+            onClick={onFaceLogin}
+          >
+            🤖 Reconocimiento Facial
+          </Button>
+          
+          <Button 
+            type="button"
+            variant="secondary" 
+            onClick={onQRLogin}
+          >
+            📱 Código QR
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={handlePasswordReset}>
+          <div className="reset-header">
+            <button
+              type="button"
+              className="back-button"
+              onClick={() => {
+                setMode('login');
+                setResetEmail('');
+                setRecaptchaVerified(false);
+              }}
+            >
+              ← Volver
+            </button>
+            <h2>Recuperar Contraseña</h2>
+          </div>
+
+          <p className="reset-description">
+            Ingresa el email asociado a tu cuenta y te enviaremos un link para restablecer tu contraseña.
+          </p>
+          
+          <Input
+            id="resetEmail"
+            type="email"
+            placeholder="Ingresa tu email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            label="Email Registrado"
+            name="resetEmail"
+          />
+          
+          <Button type="submit" variant="primary">
+            Enviar Email de Recuperación
+          </Button>
+
+          <button
+            type="button"
+            className="cancel-reset"
+            onClick={() => {
+              setMode('login');
+              setResetEmail('');
+            }}
+          >
+            Cancelar
+          </button>
+        </form>
+      )}
       
       <ProcessStatus
         show={showStatus}
@@ -156,7 +253,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
         description={statusDescription}
         progress={statusProgress}
       />
-    </form>
+    </>
   );
 };
 
