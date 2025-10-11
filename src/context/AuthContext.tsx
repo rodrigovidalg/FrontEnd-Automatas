@@ -12,6 +12,7 @@ interface AuthContextType {
   register: (userData: any) => Promise<boolean>;
   logout: () => void;
   resetPassword: (email: string) => Promise<boolean>;
+  adoptSession: (session: UserSession) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -71,6 +72,8 @@ function mapBackendUserToUser(bu: any): User {
   };
   return mapped as User;
 }
+
+
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authState, dispatch] = useReducer(authReducer, initialState);
@@ -184,6 +187,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('authvision_session');
     dispatch({ type: 'LOGOUT' });
   };
+  const adoptSession = (session: UserSession) => {
+    // Guardar igual que hace login()
+    localStorage.setItem('auth_token', session.token);
+    localStorage.setItem('authvision_session', JSON.stringify(session));
+
+    // Actualizar estado global
+    dispatch({ type: 'LOGIN_SUCCESS', payload: session.user });
+  };
 
   const resetPassword = async (email: string): Promise<boolean> => {
     try {
@@ -197,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ authState, login, loginWithFace, loginWithQR, register, logout, resetPassword }}
+      value={{ authState, login, loginWithFace, loginWithQR, register, logout, resetPassword,adoptSession, }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,9 +1,21 @@
+// src/components/FaceLoginModal.tsx
 import React, { useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+// ⚠️ usa ruta relativa para evitar problemas con "@/":
+import { faceLogin } from '../../services/facialAuthService';
+import { useAuth } from '../../context/AuthContext';
+
 
 interface FaceLoginIntegratedProps {
   isActive: boolean;
   onClose: () => void;
   onSuccess?: (userData: { photo: string; name: string }) => void;
+}
+
+// helper: de dataURL -> base64
+function dataUrlToBase64(d: string) {
+  const i = d.indexOf(',');
+  return i >= 0 ? d.slice(i + 1) : d;
 }
 
 const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
@@ -21,9 +33,19 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
     faceAlignment: 97
   };
 
+  // feedback mínimo mientras valida
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const navigate = useNavigate();
+  const auth = useAuth(); // puede lanzar si está fuera del provider
+  const adopt = (auth as any)?.adoptSession as ((s: any) => void) | undefined;
+
+
 
   const startCamera = useCallback(async () => {
     try {
@@ -94,15 +116,71 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
     startCamera();
   };
 
-  const handleConfirm = () => {
-    if (onSuccess && capturedPhoto) {
-      onSuccess({
-        photo: capturedPhoto,
-        name: recognizedUser
-      });
+  const handleConfirm = async () => {
+    if (!capturedPhoto) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      // 1) convertir dataURL -> base64 crudo
+      const i = capturedPhoto.indexOf(',');
+      const raw = i >= 0 ? capturedPhoto.slice(i + 1) : capturedPhoto;
+
+      // 2) pedir token al backend con tu servicio
+      const j = await faceLogin(raw);
+
+      // 3) tomar el token de cualquiera de estas llaves
+      const token =
+        j.token ||
+        j.Token ||
+        j.accessToken ||
+        j.access_token ||
+        j.jwt;
+
+      if (!token) throw new Error('Respuesta sin token');
+
+      const user = {
+        id: j.id || j.userId || `face_${Date.now()}`,
+        email: j.email || '',
+        phone: j.telefono || j.phone || '',
+        nickname: j.usuario || j.username || 'facelogin',
+        fullName: j.nombreCompleto || j.name || 'Usuario',
+        role: j.role || 'analista'
+      };
+
+      
+      // 5) construir la sesión
+      const session = {
+        user,
+        token,
+        loginMethod: 'face',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+      };
+
+      // 6) adoptar sesión (si el contexto está disponible); si no, fallback a localStorage
+      if (typeof adopt === 'function') {
+        adopt(session);
+      } else {
+        // Fallback seguro si por alguna razón no hay contexto (no truena la UI)
+        localStorage.setItem('auth_token', session.token);
+        localStorage.setItem('authvision_session', JSON.stringify(session));
+      }
+
+      // 7) cerrar modal y navegar sin recargar
+      onSuccess?.({ photo: capturedPhoto, name: user.fullName });
+      onClose();
+      navigate('/dashboard', { replace: true });
+
+      // 7) ir al dashboard FORZANDO recarga
+      // (así el AuthProvider hace "restore" y marca isAuthenticated=true)
+      window.location.replace('/dashboard');
+    } catch (err: any) {
+      console.error(err);
+      setSubmitError(err?.message || 'No se pudo validar tu rostro.');
+    } finally {
+      setSubmitting(false);
     }
-    onClose();
   };
+
 
   if (!isActive) return null;
 
@@ -203,9 +281,16 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Mensaje de error simple */}
+                {submitError && (
+                  <p style={{ color: '#b91c1c', fontWeight: 700, marginTop: 12 }}>
+                    {submitError}
+                  </p>
+                )}
               </div>
 
-              {/* Usuario */}
+              {/* Usuario (visual) */}
               <div className="user-section">
                 <div className="user-icon">✓</div>
                 <div className="user-info">
@@ -216,11 +301,11 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
 
               {/* Botones */}
               <div className="action-buttons">
-                <button className="btn btn-secondary" onClick={handleRetake}>
+                <button className="btn btn-secondary" onClick={handleRetake} disabled={submitting}>
                   Retomar Foto
                 </button>
-                <button className="btn btn-primary" onClick={handleConfirm}>
-                  Confirmar Acceso
+                <button className="btn btn-primary" onClick={handleConfirm} disabled={submitting}>
+                  {submitting ? 'Validando…' : 'Confirmar Acceso'}
                 </button>
               </div>
             </div>
@@ -228,6 +313,7 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
         )}
       </div>
 
+      {/* (tus estilos existentes se mantienen tal cual) */}
       <style>{`
         .face-modal {
           position: fixed;

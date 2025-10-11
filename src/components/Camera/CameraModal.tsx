@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-
+import { segmentFace } from '../../services/facialAuthService';
+import { dataUrlToBase64 } from '../../hooks/useCamera';
 interface PlacedEmoji {
   emoji: string;
   x: number;
@@ -10,7 +11,7 @@ interface PlacedEmoji {
 interface CameraModalProps {
   isActive: boolean;
   onClose: () => void;
-  onCapture: (photoData: string) => void;
+  onCapture: (photoData: string) => void; // lo mantengo, pero el guardado es localStorage
   title: string;
   showFilters?: boolean;
   showEmojis?: boolean;
@@ -24,12 +25,14 @@ const CameraModal: React.FC<CameraModalProps> = ({
   showFilters = true,
   showEmojis = true 
 }) => {
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null); // dataURL a mostrar
+  const [segmentedB64, setSegmentedB64] = useState<string | null>(null);   // base64 crudo segmentado
   const [appliedEmojis, setAppliedEmojis] = useState<PlacedEmoji[]>([]);
   const [currentFilter, setCurrentFilter] = useState('normal');
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
   const [isLoading, setIsLoading] = useState(false);
+  const [segMsg, setSegMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedEmojiIndex, setDraggedEmojiIndex] = useState<number | null>(null);
@@ -82,19 +85,26 @@ const CameraModal: React.FC<CameraModalProps> = ({
     };
   }, [isActive, currentStep, startCamera, stopCamera]);
 
-  const handleCapture = useCallback(() => {
+  const handleCapture = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     setIsLoading(true);
+    setSegMsg('Segmentando rostro…');
+    setSegmentedB64(null);
+    setError(null);
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     
     if (!context) {
       setIsLoading(false);
+      setSegMsg(null);
+      setError('No se pudo acceder al contexto del canvas');
       return;
     }
     
+    // espejo horizontal para que coincida con el preview
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.save();
@@ -102,15 +112,29 @@ const CameraModal: React.FC<CameraModalProps> = ({
     context.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
     context.restore();
     
-    const imageData = canvas.toDataURL('image/png', 1.0);
-    
-    setTimeout(() => {
-      setIsLoading(false);
-      setCapturedImage(imageData);
+    // DataURL de la foto cruda
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+
+    try {
+      // === SEGMENTACIÓN AUTOMÁTICA ===
+      const raw = dataUrlToBase64(imageDataUrl);
+      const seg = await segmentFace(raw); // base64 sin prefijo
+      setSegmentedB64(seg);
+      
+      // Mostrar la imagen segmentada en el UI (reemplazamos la original)
+      const segDataUrl = `data:image/jpeg;base64,${seg}`;
+      setCapturedImage(segDataUrl);
       setCurrentStep('confirm');
       setSliderValue(0);
+      setSegMsg('Segmentación OK.');
       stopCamera();
-    }, 300);
+    } catch (e: any) {
+      console.error('Error segmentando:', e);
+      setError(e?.message || 'Error al segmentar el rostro');
+      setSegMsg(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [stopCamera]);
 
   const handleSliderChange = (value: number) => {
@@ -122,12 +146,14 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
   const handleRejectPhoto = () => {
     setCapturedImage(null);
+    setSegmentedB64(null);
     setAppliedEmojis([]);
     setCurrentFilter('normal');
     setBrightness(100);
     setContrast(100);
     setCurrentStep('camera');
     setSliderValue(0);
+    setSegMsg(null);
     startCamera();
   };
 
@@ -230,65 +256,41 @@ const CameraModal: React.FC<CameraModalProps> = ({
 
   const handleFilterChange = (filter: string) => setCurrentFilter(filter);
   
+  /**
+   * Guardar en el modal:
+   *  - NO envía a DB
+   *  - Guarda rostro segmentado parcial en localStorage.pendingFaceB64
+   *  - (opcional) notifica al padre con onCapture(capturedImage) por si lo usan
+   */
   const handleSaveEdit = async () => {
-    const canvas = editCanvasRef.current;
-    if (!canvas) return;
-    
+    if (!segmentedB64) {
+      setError('Primero captura para segmentar el rostro.');
+      return;
+    }
     setIsSaving(true);
-    
     try {
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      if (!tempCtx) return;
-      
-      const img = new Image();
-      img.onload = () => {
-        tempCanvas.width = img.width;
-        tempCanvas.height = img.height;
-        
-        let filterCSS = '';
-        if (currentFilter !== 'normal') {
-          switch (currentFilter) {
-            case 'vintage': filterCSS = 'sepia(50%) hue-rotate(20deg)'; break;
-            case 'bw': filterCSS = 'grayscale(100%)'; break;
-            case 'sepia': filterCSS = 'sepia(100%)'; break;
-          }
-        }
-        filterCSS += ` brightness(${brightness}%) contrast(${contrast}%)`;
-        
-        tempCtx.filter = filterCSS;
-        tempCtx.drawImage(img, 0, 0);
-
-        tempCtx.filter = 'none';
-        appliedEmojis.forEach(({ emoji, x, y, size }) => {
-          tempCtx.font = `${size}px Arial`;
-          tempCtx.textAlign = 'left';
-          tempCtx.textBaseline = 'top';
-          tempCtx.fillText(emoji, x, y);
-        });
-
-        const finalImageData = tempCanvas.toDataURL('image/png', 1.0);
-        onCapture(finalImageData);
-        setIsSaving(false);
-        onClose();
-      };
-      img.src = capturedImage!;
-      
+      localStorage.setItem('pendingFaceB64', segmentedB64); // === GUARDADO PARCIAL ===
+      // opcional: notificar al padre con la imagen segmentada que se ve en el UI
+      if (capturedImage) onCapture(capturedImage);
+      onClose();
     } catch (err) {
-      console.error('Error saving image:', err);
-      setError('Error al guardar la imagen');
+      console.error('Error al guardar parcial:', err);
+      setError('Error al guardar la imagen segmentada localmente');
+    } finally {
       setIsSaving(false);
     }
   };
 
   const handleRetake = () => {
     setCapturedImage(null);
+    setSegmentedB64(null);
     setAppliedEmojis([]);
     setCurrentFilter('normal');
     setBrightness(100);
     setContrast(100);
     setCurrentStep('camera');
     setSliderValue(0);
+    setSegMsg(null);
     startCamera();
   };
 
@@ -366,6 +368,7 @@ const CameraModal: React.FC<CameraModalProps> = ({
                     </span>
                   </button>
                   <p className="capture-hint">Haz clic para capturar</p>
+                  {segMsg && <p className="capture-hint" style={{opacity:.85}}>{segMsg}</p>}
                 </div>
               </div>
             )}
@@ -376,9 +379,9 @@ const CameraModal: React.FC<CameraModalProps> = ({
                   <div className="confirm-bg-gradient"></div>
                 </div>
                 <div className="confirm-image-container">
-                  <img src={capturedImage} alt="Foto capturada" className="confirm-image" />
+                  <img src={capturedImage} alt="Foto segmentada" className="confirm-image" />
                   <div className="confirm-overlay">
-                    <p className="confirm-text">Desliza para confirmar</p>
+                    <p className="confirm-text">Desliza para continuar</p>
                   </div>
                 </div>
 
@@ -532,7 +535,8 @@ const CameraModal: React.FC<CameraModalProps> = ({
         </div>
       </div>
 
-      <style>{`
+      {/* styles: no tocados (tu UI intacta) */}
+            <style>{`
         .cam-modal {
           position: fixed;
           top: 0;

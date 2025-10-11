@@ -72,7 +72,7 @@ export const useCamera = () => {
       if (currentVideoId.current) {
         const video = document.getElementById(currentVideoId.current) as HTMLVideoElement;
         if (video) {
-          video.srcObject = null;
+          (video as HTMLVideoElement).srcObject = null;
         }
       }
       
@@ -138,7 +138,7 @@ export const useCamera = () => {
     // Dibujar la imagen del video en el canvas
     ctx.drawImage(video, 0, 0);
     
-    // Convertir a base64
+    // Convertir a base64 (dataURL)
     return canvas.toDataURL('image/jpeg', 0.9);
   }, [cameraState.brightness, cameraState.contrast]);
   
@@ -161,4 +161,10 @@ export const useCamera = () => {
     capturePhoto,
     videoRef
   };
+};
+
+/** Helper: convierte dataURL -> base64 (sin prefijo) */
+export const dataUrlToBase64 = (d: string) => {
+  const i = d.indexOf(',');
+  return i >= 0 ? d.slice(i + 1) : d;
 };

@@ -21,7 +21,12 @@ export const API_ROUTES = {
   REGISTER: '/api/Auth/register', // si tu register es /api/Auth/register
   FACE_LOGIN: '/api/Auth/face-login',
   QR_LOGIN: '/api/Auth/qr-login',
-  RESET_PASSWORD: '/api/Auth/reset-password'
+  RESET_PASSWORD: '/api/Auth/reset-password',
+
+   // === Facial ===
+  FACIAL_SEGMENT: '/api/FacialAuth/segment',
+  FACIAL_SAVE: '/api/FacialAuth/save',
+  FACIAL_LOGIN: '/api/FacialAuth/login'// reemplaza el viejo FACE_LOGIN
 } as const;
 
 export const FILTERS: FilterOption[] = [

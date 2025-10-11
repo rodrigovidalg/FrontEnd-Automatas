@@ -1,5 +1,11 @@
+// src/components/Auth/RegisterForm.tsx
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
+
+// Si no usas alias "@", cambia estos imports a rutas relativas:
+import { api } from '../../services/api';
+import { saveFaceToDB } from '../../services/facialAuthService';
+import { API_ROUTES } from '../../utils/constants';
+
 import { validatePassword } from '../../utils/validation';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
@@ -20,31 +26,27 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     phone: '',
     notifications: 'email' as 'email' | 'whatsapp' | 'both'
   });
-  
-  // --- Estados de Errores y Validación ---
+
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  // NUEVO: Estado para errores generales del formulario
   const [formError, setFormError] = useState('');
 
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [recaptchaVerified, setRecaptchaVerified] = useState(false);
-  
+
   const [showStatus, setShowStatus] = useState(false);
   const [statusTitle, setStatusTitle] = useState('');
   const [statusDescription, setStatusDescription] = useState('');
   const [statusProgress, setStatusProgress] = useState(0);
-  
-  const { register } = useAuth();
+
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Limpiar errores al escribir
     if (name === 'email') setEmailError('');
     if (name === 'password' || name === 'confirmPassword') setPasswordError('');
-    if (formError) setFormError(''); // Limpiar error general al interactuar
+    if (formError) setFormError('');
   };
 
   useEffect(() => {
@@ -62,7 +64,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     }
   }, [formData.password, formData.confirmPassword]);
 
-  // --- MEJORA: Función de validación centralizada ---
   const validateForm = () => {
     let isValid = true;
     setEmailError('');
@@ -73,19 +74,21 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       setEmailError('Por favor, introduce un correo electrónico válido.');
       isValid = false;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       setPasswordError('Las contraseñas no coinciden.');
       isValid = false;
     }
 
-    for (const [key, value] of Object.entries(formData)) {
-      if (key !== 'confirmPassword' && !value) {
+    const requiredKeys: (keyof typeof formData)[] = ['nickname', 'email', 'fullName', 'password', 'phone'];
+    for (const key of requiredKeys) {
+      if (!formData[key]) {
         setFormError(`⚠️ Por favor completa el campo: ${key === 'fullName' ? 'nombre completo' : key}`);
         isValid = false;
+        break;
       }
     }
-    
+
     if (!recaptchaVerified) {
       setFormError('⚠️ Por favor completa la verificación reCAPTCHA');
       isValid = false;
@@ -96,58 +99,94 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return; // Si la validación falla, detener aquí
-    }
-    
-    setShowStatus(true);
-    setStatusTitle('Validando');
-    setStatusDescription('Verificando datos...');
-    setStatusProgress(20);
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setStatusTitle('Procesando');
-    setStatusDescription('Creando cuenta...');
-    setStatusProgress(50);
-    
-    const userData = {
-      ...formData,
-      confirmPassword: undefined, 
-      originalPhoto: 'data:image/jpeg;base64,simulated_original_photo',
-      processedPhoto: 'data:image/jpeg;base64,simulated_processed_photo'
-    };
-    
-    const success = await register(userData);
-    
-    if (success) {
+
+    if (!validateForm()) return;
+
+    try {
+      setShowStatus(true);
+      setStatusTitle('Validando');
+      setStatusDescription('Verificando datos...');
+      setStatusProgress(20);
+      await new Promise(r => setTimeout(r, 400));
+
+      setStatusTitle('Registrando');
+      setStatusDescription('Creando cuenta en el servidor...');
+      setStatusProgress(40);
+
+      // 1) Registro
+      const payloadRegister = {
+        usuario: formData.nickname,
+        email: formData.email,
+        nombreCompleto: formData.fullName,
+        password: formData.password,
+        telefono: formData.phone
+      };
+      await api(API_ROUTES.REGISTER, { method: 'POST', json: payloadRegister });
+
+      setStatusTitle('Autenticando');
+      setStatusDescription('Generando sesión...');
+      setStatusProgress(60);
+
+      // 2) Login para token
+      const loginRes = await api(API_ROUTES.LOGIN, {
+        method: 'POST',
+        json: { usuarioOrEmail: formData.nickname || formData.email, password: formData.password }
+      });
+      const token = loginRes.token || loginRes.Token || loginRes.accessToken;
+      if (token) localStorage.setItem('token', token);
+
+      setStatusTitle('Sincronizando');
+      setStatusDescription('Consultando tu perfil...');
+      setStatusProgress(75);
+
+      // 3) /me para userId  (SIN API_ROUTES.ME)
+      const me = await api('/api/Auth/me', { auth: true });
+      const userId =
+        me.id || me.userId || me.usuarioId || me.sub || (me.user && me.user.id);
+      if (!userId) throw new Error('No se pudo obtener userId');
+
+      setStatusTitle('Guardando biometría');
+      setStatusDescription('Asociando tu rostro a la cuenta...');
+      setStatusProgress(85);
+
+      // 4) Si hay rostro parcial => guardar en DB
+      const pending = localStorage.getItem('pendingFaceB64');
+      if (pending) {
+        await saveFaceToDB(String(userId), pending);
+        localStorage.removeItem('pendingFaceB64');
+      }
+
       setStatusTitle('Completado');
-      setStatusDescription('Registro exitoso!');
+      setStatusDescription('Registro exitoso ✅');
       setStatusProgress(100);
-      // Limpiar formulario después de un registro exitoso
+
       setTimeout(() => {
+        setShowStatus(false);
         setFormData({
-          nickname: '', email: '', fullName: '', password: '', confirmPassword: '', phone: '', notifications: 'email'
+          nickname: '',
+          email: '',
+          fullName: '',
+          password: '',
+          confirmPassword: '',
+          phone: '',
+          notifications: 'email'
         });
         setRecaptchaVerified(false);
-      }, 1500);
-    } else {
+        alert('Registro completado');
+      }, 800);
+    } catch (err: any) {
+      console.error(err);
       setStatusTitle('Error');
-      setStatusDescription('No se pudo completar el registro. Inténtalo de nuevo.');
+      setStatusDescription('No se pudo completar el registro.');
       setStatusProgress(0);
-      setFormError('Ocurrió un error en el servidor. Por favor, inténtalo más tarde.');
+      setFormError(err?.message || 'Ocurrió un error en el servidor. Inténtalo más tarde.');
+      setTimeout(() => setShowStatus(false), 2000);
     }
-    
-    setTimeout(() => setShowStatus(false), 3000);
   };
 
   const handleRecaptchaVerified = () => {
     setRecaptchaVerified(true);
-    // Limpiar cualquier error de reCAPTCHA previo
-    if (formError.includes('reCAPTCHA')) {
-      setFormError('');
-    }
+    if (formError.includes('reCAPTCHA')) setFormError('');
   };
 
   const getPasswordStrengthClass = () => {
@@ -164,9 +203,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         <p>Únete a la próxima generación de autenticación</p>
       </div>
 
-      {/* NUEVO: Banner para errores generales del formulario */}
       {formError && <div className="form-error-banner">{formError}</div>}
-      
+
       <Input
         id="regNickname"
         type="text"
@@ -176,7 +214,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         name="nickname"
         label="Usuario"
       />
-      
+
       <Input
         id="regEmail"
         type="email"
@@ -186,9 +224,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         name="email"
         label="Correo"
       />
-      {/* El mensaje de error se muestra aquí */}
       {emailError && <p className="error-message">{emailError}</p>}
-      
+
       <Input
         id="regFullName"
         type="text"
@@ -198,7 +235,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         name="fullName"
         label="Nombre Completo"
       />
-      
+
       <div className="form-group">
         <label className="form-label">Contraseña</label>
         <input
@@ -228,7 +265,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         />
         {passwordError && <p className="error-message">{passwordError}</p>}
       </div>
-      
+
       <Input
         id="regPhone"
         type="tel"
@@ -239,28 +276,18 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         label="Teléfono"
       />
 
-      <Recaptcha 
-        onVerified={handleRecaptchaVerified} 
-        value={recaptchaVerified} 
-      />
-      
+      <Recaptcha onVerified={handleRecaptchaVerified} value={recaptchaVerified} />
+
       <div className="register-buttons">
-        <Button 
-          type="submit"
-          variant="primary"
-        >
+        <Button type="submit" variant="primary">
           🚀 Registrarse Ahora
         </Button>
-        
-        <Button 
-          type="button"
-          variant="advanced" 
-          onClick={onCameraCapture}
-        >
+
+        <Button type="button" variant="advanced" onClick={onCameraCapture}>
           📸 Registrarse con Foto
         </Button>
       </div>
-      
+
       <ProcessStatus
         show={showStatus}
         title={statusTitle}
