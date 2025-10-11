@@ -63,6 +63,21 @@
 .dash .btn:active{ transform:translateY(0); }
 .dash .btn:focus-visible{ outline:none; box-shadow: var(--shadow), var(--ring); }
 .dash .btn--primary{ background:var(--primary-700); color:#fff; border-color:transparent; }
+/* Amarillo para botón "Limpiar" */
+.dash .btn--warning{
+  background: #f59e0b;
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 18px 40px rgba(245,158,11,.22);
+}
+.dash .btn--warning:hover{
+  background: #d97706;
+}
+.dash .btn--warning:focus-visible{
+  outline: none;
+  box-shadow: var(--shadow), 0 0 0 4px rgba(245,158,11,.25);
+}
+
 .dash .btn--primary:hover{ background:var(--primary-600); }
 
 /* ===== Barra superior ===== */
@@ -74,11 +89,12 @@
 
 /* Cargar TXT */
 .dash .file-picker{ display:flex; align-items:center; gap:12px }
-.dash .file-picker .btn{
+.dash .file-picker .btn:not(.btn--primary){
   width:100%; justify-content:center;
   background: linear-gradient(180deg,#ffffff,#f7faf9);
   border-color:#e3ece9; color:#374151;
 }
+
 .dash .hint{
   display:inline-flex; gap:6px; align-items:center; color:var(--muted);
   font-size:.92rem;
@@ -173,3 +189,105 @@
 
 /* Micro-animaciones */
 .dash .btn { will-change: transform, box-shadow; }
+
+/* ===== Mejoras solicitadas ===== */
+
+/* Label "Idioma" con color distinto al select */
+.dash .lang-label {
+  background: var(--primary-100);
+  color: var(--primary-700);
+  border-color: #d9ebe6;
+  font-weight: 700;
+}
+
+/* Botones deshabilitados: "color abstracto" y bloqueo de hover */
+.dash .btn:disabled,
+.dash .btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .75;
+  transform: none;
+  box-shadow: var(--shadow-sm);
+  /* Patrón suave tipo "abstracto" */
+  background: repeating-linear-gradient(
+    45deg,
+    #e5e7eb,
+    #e5e7eb 10px,
+    #f3f4f6 10px,
+    #f3f4f6 20px
+  ) !important;
+  color: #9ca3af !important;
+  border-color: #e5e7eb !important;
+}
+
+/* Contenedor de charts */
+.dash .charts-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:14px;
+  margin-top:14px;
+}
+
+@media (max-width: 992px){
+  .dash .charts-grid{ grid-template-columns: 1fr; }
+}
+
+/* ==== Tema rojo (logout) ==== */
+:root, .dash {
+  --danger-700: #b91c1c;
+  --danger-600: #dc2626;
+  --danger-100: #fee2e2;
+}
+
+/* Botón de cerrar sesión en rojo */
+.dash .btn--danger{
+  background: var(--danger-700);
+  color:#fff;
+  border-color: transparent;
+  box-shadow: 0 18px 40px rgba(185,28,28,.18);
+}
+.dash .btn--danger:hover{
+  background: var(--danger-600);
+}
+.dash .btn--danger:focus-visible{
+  outline: none;
+  box-shadow: var(--shadow), 0 0 0 4px rgba(220,38,38,.20);
+}
+
+/* Títulos en verde del tema */
+.dash h1{
+  color: var(--primary-700);
+}
+
+.dash .card__header{
+  color: var(--primary-700);
+  font-weight: 800;
+}
+
+/* Estado general deshabilitado */
+.dash .btn:disabled{
+  opacity: .65;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: saturate(.2);
+}
+
+/* Procesar (verde) deshabilitado: gris claro */
+.dash .btn--primary:disabled{
+  background: #e5e7eb;    /* gris claro */
+  color: #9ca3af;         /* gris texto */
+  border-color: #e5e7eb;
+}
+.dash .btn--primary:disabled:hover{
+  background: #e5e7eb;
+}
+
+/* Limpiar (amarillo) deshabilitado: gris claro */
+.dash .btn--warning:disabled{
+  background: #e5e7eb;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  box-shadow: none;
+}
+.dash .btn--warning:disabled:hover{
+  background: #e5e7eb;
+}
