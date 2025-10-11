@@ -2,6 +2,16 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './dashboard.css';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  LabelList,
+} from 'recharts';
 
 type LangISO = 'es' | 'en' | 'ru';
 type FreqItem = { word: string; count: number };
@@ -17,83 +27,9 @@ type AnalysisResult = {
   other?: Record<string, any>;
 };
 
-function analyzeLocally(text: string, lang: LangISO): AnalysisResult {
-  // tokenización
-  const words = toWords(text);
-  const normalized = words.map((w) => w.toLowerCase());
-
-  // frecuencias
-  const fm = freqMap(normalized);
-
-  // pronombres por idioma
-  const pronounsSet = new Set(PRONOUNS[lang].map((p) => p.toLowerCase()));
-  const pronounsFound = Array.from(new Set(normalized.filter((w) => pronounsSet.has(w))));
-
-  return {
-    totalWords: normalized.length,
-    topWords: topNFreq(fm, 10),
-    rareWords: rareNFreq(fm, 10),
-    pronouns: pronounsFound.slice(0, 30),
-    persons: guessPersons(text, lang),
-    nounsLemma: Array.from(new Set(fakeLemmaNouns(normalized, lang))),
-    verbsLemma: Array.from(new Set(fakeLemmaVerbs(normalized, lang))),
-    other: { note: 'Resultados heurísticos locales (demo) cuando no hay endpoint.' }
-  };
-}
-
-const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'Inglés', ru: 'Ruso' };
-
 /** =======================
- *   API REAL (Railway)
+ *  Utilidades existentes
  *  ======================= */
-const API_BASE = 'https://lexicoreapi-production.up.railway.app';
-const API = {
-  upload: `${API_BASE}/api/documentos`,                 // multipart: file, usuarioId, codigoIso
-  analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`, // POST sin body
-  health: `${API_BASE}/api/health`
-};
-
-// -------- Iconos (SVG inline, heredan color con currentColor) --------
-const Icon = {
-  Upload: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Globe: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c3.866 0 7-4.03 7-9s-3.134-9-7-9-7 4.03-7 9 3.134 9 7 9zm-7-9h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
-    </svg>
-  ),
-  Play: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M8 5v14l11-7-11-7z"/>
-    </svg>
-  ),
-  Broom: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M3 21l6-6m0 0l3-3m-3 3l3 3m3-9l3-3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Refresh: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M20 7h-5m5 0l-3-3m3 3l-3 3M4 17h5m-5 0l3-3m-3 3l3 3M7 7a7 7 0 1110 10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Download: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 4v12m0 0l4-4m-4 4l-4-4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Doc: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.5"/>
-    </svg>
-  )
-};
-
-// ---- Heurísticas locales / utilidades (fallback) ----
 const PRONOUNS: Record<LangISO, string[]> = {
   es: ['yo','tú','vos','usted','él','ella','nosotros','nosotras','ustedes','vosotros','vosotras','ellos','ellas','me','te','se','mi','tu','su','nos','les','lo','la','los','las'],
   en: ['i','you','he','she','we','they','me','him','her','us','them','my','your','his','our','their','its'],
@@ -145,7 +81,85 @@ function fakeLemmaVerbs(words: string[], lang: LangISO): string[] {
 }
 
 /** =======================
- *   Llamadas a Lexico.API
+ *  Análisis local (fallback)
+ *  ======================= */
+function analyzeLocally(text: string, lang: LangISO): AnalysisResult {
+  const words = toWords(text);
+  const normalized = words.map((w) => w.toLowerCase());
+  const fm = freqMap(normalized);
+  const pronounsSet = new Set(PRONOUNS[lang].map((p) => p.toLowerCase()));
+  const pronounsFound = Array.from(new Set(normalized.filter((w) => pronounsSet.has(w))));
+  return {
+    totalWords: normalized.length,
+    topWords: topNFreq(fm, 10),
+    rareWords: rareNFreq(fm, 10),
+    pronouns: pronounsFound.slice(0, 30),
+    persons: guessPersons(text, lang),
+    nounsLemma: Array.from(new Set(fakeLemmaNouns(normalized, lang))),
+    verbsLemma: Array.from(new Set(fakeLemmaVerbs(normalized, lang))),
+    other: { note: 'Resultados heurísticos locales (demo) cuando no hay endpoint.' }
+  };
+}
+
+const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'Inglés', ru: 'Ruso' };
+
+/** =======================
+ *  API (con .env + proxy)
+ *  ======================= */
+const API_BASE = 'https://lexicoreapi-production.up.railway.app';
+const API = {
+  upload: `${API_BASE}/api/documentos`,
+  analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
+  health: `${API_BASE}/api/health`
+};
+
+const Icon = {
+  Upload: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Globe: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c3.866 0 7-4.03 7-9s-3.134-9-7-9-7 4.03-7 9 3.134 9 7 9zm-7-9h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
+    </svg>
+  ),
+  Play: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7-11-7z"/>
+    </svg>
+  ),
+  Broom: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M3 21l6-6m0 0l3-3m-3 3l3 3m3-9l3-3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Refresh: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M20 7h-5m5 0l-3-3m3 3l-3 3M4 17h5m-5 0l3-3m-3 3l3 3M7 7a7 7 0 1110 10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Download: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 4v12m0 0l4-4m-4 4l-4-4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  Doc: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.5"/>
+    </svg>
+  ),
+  Power: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2v8m6.364-4.364A8 8 0 1 1 5.636 5.636" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+
+};
+
+/** =======================
+ *  Llamadas a la API
  *  ======================= */
 async function uploadDocumento(file: File, usuarioId: number, codigoIso: LangISO): Promise<number> {
   const fd = new FormData();
@@ -155,9 +169,7 @@ async function uploadDocumento(file: File, usuarioId: number, codigoIso: LangISO
 
   const res = await fetch(API.upload, { method: 'POST', body: fd });
   if (!res.ok) throw new Error('Error al subir documento');
-
   const data: any = await res.json();
-  // Intentamos detectar el id con distintos nombres comunes
   const id =
     data?.id ??
     data?.documentoId ??
@@ -177,11 +189,7 @@ async function analizarDocumento(documentoId: number | string): Promise<any> {
   return res.json();
 }
 
-/** Mapeador flexible: adapta la respuesta de la API a AnalysisResult.
- *  Si faltan campos, rellena con un análisis local sobre el texto.
- */
 function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangISO): AnalysisResult {
-  // 1) Si la API ya trae todo con nombres parecidos:
   const totalWords =
     apiResp?.totalWords ?? apiResp?.totalPalabras ?? apiResp?.conteoPalabras ?? null;
 
@@ -209,7 +217,6 @@ function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangIS
   const verbsLemma: string[] =
     apiResp?.verbsLemma ?? apiResp?.verbos ?? apiResp?.lemmas?.verbs ?? [];
 
-  // 2) Si faltan cosas, calculamos localmente
   if (
     totalWords === null ||
     !topWords.length ||
@@ -218,7 +225,6 @@ function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangIS
     !persons.length ||
     !nounsLemma.length ||
     !verbsLemma.length
-
   ) {
     const localResult = analyzeLocally(fallbackText, lang);
     return {
@@ -245,11 +251,37 @@ function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangIS
   };
 }
 
+// Colores del tema (verdes)
+const GREEN = {
+  dark:  '#2e5e54', // --primary-700
+  mid:   '#3a6f64', // --primary-600
+  light: '#447c6f', // --primary-500
+  grid:  '#e5e7eb'  // --border aprox para la cuadrícula
+};
+
 /** =======================
- *        Componente
+ *  Componente
  *  ======================= */
 const DashboardPage: React.FC = () => {
-  const { authState } = useAuth();
+  const auth: any = useAuth();
+const { authState } = auth;
+const logoutFn: undefined | (() => Promise<void> | void) =
+  auth?.logout || auth?.signOut || auth?.logOut;
+
+const handleLogout = async () => {
+  try {
+    if (typeof logoutFn === 'function') {
+      await logoutFn();
+    } else {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
+  } finally {
+    // Ajusta esta ruta si tu pantalla de login es otra
+    window.location.href = '/login';
+  }
+};
+
   const [lang, setLang] = useState<LangISO>('es');
   const [rawText, setRawText] = useState<string>('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -262,6 +294,9 @@ const DashboardPage: React.FC = () => {
     () => authState.user?.fullName || authState.user?.nickname || authState.user?.email || 'Usuario',
     [authState.user]
   );
+
+  // Palabras normalizadas del texto (para contar pronombres y personas)
+  const normalizedWords = useMemo(() => toWords(rawText).map(w => w.toLowerCase()), [rawText]);
 
   const handleFile = async (file?: File | null) => {
     if (!file) return;
@@ -278,63 +313,182 @@ const DashboardPage: React.FC = () => {
     try {
       setLoading(true); setErrorMsg(null);
 
-      // 1) SUBIR DOCUMENTO
       const usuarioIdNumeric = Number((authState.user?.id as any) ?? 1) || 1;
       const docId = await uploadDocumento(selectedFile, usuarioIdNumeric, lang);
 
-      // 2) ANALIZAR
       const apiResp = await analizarDocumento(docId);
 
-      // 3) MAPEAR / COERCER
       const normalized = coerceToAnalysisResult(apiResp, rawText, lang);
       setResult(normalized);
     } catch (err: any) {
-    // Fallback local
-    const localResult = analyzeLocally(rawText, lang);
-    setResult(localResult);
-    setErrorMsg(err?.message || 'No se pudo contactar la API — mostrando análisis local de demostración.');
+      const localResult = analyzeLocally(rawText, lang);
+      setResult(localResult);
+      setErrorMsg(err?.message || 'No se pudo contactar la API — mostrando análisis local de demostración.');
     } finally {
-    setLoading(false);
+      setLoading(false);
     }
   };
 
   const topOrEmpty = (arr?: FreqItem[]) => (arr ?? []).map(({ word, count }) => `${word} (${count})`).join(', ') || '—';
   const listOrEmpty = (arr?: string[]) => (arr && arr.length ? arr.join(', ') : '—');
 
+  /** ====== Datos para gráficos ====== */
+  // Top / Rare
+  const dataTop = useMemo(() =>
+    (result?.topWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
+  const dataRare = useMemo(() =>
+    (result?.rareWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
+
+  // Pronombres: contamos frecuencia real en el texto
+  const dataPronouns = useMemo(() => {
+    if (!result) return [];
+    const set = new Set(PRONOUNS[lang].map(p => p.toLowerCase()));
+    const counts = new Map<string, number>();
+    for (const w of normalizedWords) if (set.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a,b)=>b.value-a.value)
+      .slice(0, 15);
+  }, [result, lang, normalizedWords]);
+
+  // Personas: contamos apariciones (case-insensitive)
+  const dataPersons = useMemo(() => {
+    if (!result) return [];
+    const set = new Set(result.persons.map(p => p.toLowerCase()));
+    if (set.size === 0) return [];
+    const counts = new Map<string, number>();
+    for (const w of normalizedWords) if (set.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+    return Array.from(counts.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a,b)=>b.value-a.value)
+      .slice(0, 15);
+  }, [result, normalizedWords]);
+
+  // Otras clasificaciones: resumen por categorías
+  const dataOther = useMemo(() => {
+    if (!result) return [];
+    const items = [
+      { name: 'Pronombres', value: result.pronouns.length || 0 },
+      { name: 'Personas', value: result.persons.length || 0 },
+      { name: 'Sustantivos (raíz)', value: result.nounsLemma.length || 0 },
+      { name: 'Verbos (raíz)', value: result.verbsLemma.length || 0 },
+      { name: 'Top (Únicas)', value: (result.topWords || []).length },
+      { name: 'Raras (Únicas)', value: (result.rareWords || []).length },
+    ];
+    return items;
+  }, [result]);
+
+  /** ====== Exportar a CSV ====== */
+  const canExport = !!result && (result.totalWords ?? 0) > 0;
+
+  const handleExport = () => {
+    if (!canExport || !result) return;
+    const csvLines: string[] = [];
+
+    csvLines.push('Sección,Item,Valor');
+
+    csvLines.push('Resumen,TotalPalabras,' + result.totalWords);
+
+    csvLines.push('TopWords,Palabra,Frecuencia');
+    for (const x of result.topWords) csvLines.push(`TopWords,${x.word},${x.count}`);
+
+    csvLines.push('RareWords,Palabra,Frecuencia');
+    for (const x of result.rareWords) csvLines.push(`RareWords,${x.word},${x.count}`);
+
+    csvLines.push('Pronombres,Pronombre,Frecuencia');
+    for (const x of dataPronouns) csvLines.push(`Pronombres,${x.name},${x.value}`);
+
+    csvLines.push('Personas,Nombre,Frecuencia');
+    for (const x of dataPersons) csvLines.push(`Personas,${x.name},${x.value}`);
+
+    csvLines.push('Otras,Clasificación,Conteo');
+    for (const x of dataOther) csvLines.push(`Otras,${x.name},${x.value}`);
+
+    const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'analisis_lexico.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  /** ====== Componente gráfico genérico ====== */
+const ChartCard: React.FC<{
+  title: string;
+  data: { name: string; value: number }[];
+  color?: string;
+}> = ({ title, data, color = GREEN.dark }) => (
+  <section className="card">
+    <div className="card__header">{title}</div>
+    <div className="card__body" style={{ height: 300 }}>
+      {data && data.length ? (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid stroke={GREEN.grid} strokeDasharray="3 3" />
+            <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={60} />
+            <YAxis allowDecimals={false} />
+            <Tooltip />
+            <Bar dataKey="value" fill={color}>
+              <LabelList dataKey="value" position="top" />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="muted">—</div>
+      )}
+    </div>
+  </section>
+);
+
+
   return (
     <div className="dash">
-      {/* Header con iconos */}
+      {/* Header */}
       <header className="dash__header">
         <div>
-          <h1>Dashboard</h1>
+          <h1>Análisis y Dashboard Léxico</h1>
           <p className="dash__subtitle">Frontend · Visualización · Reportes · Dashboard</p>
         </div>
         <div className="dash__actions">
-          <span className="welcome">👋 Bienvenido, <strong>{displayName}</strong></span>
-          <button className="btn btn--primary">
+          <span className="welcome">Bienvenido: <strong>{displayName}</strong></span>
+          <button
+            className="btn btn--primary"
+            onClick={handleExport}
+            disabled={!canExport}
+            aria-disabled={!canExport}
+            title={canExport ? 'Exportar resultados' : 'Exportar (deshabilitado)'}
+          >
             <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Download/>Exportar</span>
           </button>
-          <button className="btn">
+          <button className="btn btn--green-soft">
             <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Refresh/>Actualizar</span>
           </button>
+
+          <button className="btn btn--danger" onClick={handleLogout} title="Cerrar sesión">
+           <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>
+            <Icon.Power/> Cerrar sesión
+           </span>
+          </button>
+
+
         </div>
       </header>
 
-      {/* Barra superior: Cargar, Idioma (combobox), Acciones */}
+      {/* Barra superior */}
       <section className="bar">
         {/* Cargar TXT */}
         <div className="file-picker">
-          <button
+        <button
             type="button"
-            className="btn"
+            className="btn btn--primary"   // <<-- ANTES estaba con estilos inline
             onClick={() => fileInputRef.current?.click()}
-            style={{background:'linear-gradient(180deg,#ffffff,#f7faf9)', color:'#374151', borderColor:'#e3ece9'}}
             aria-label="Cargar archivo .txt"
-          >
+>
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-              <Icon.Upload/> Cargar .txt
+            <Icon.Upload/> Cargar .txt
             </span>
-          </button>
+        </button>
+
           <input
             ref={fileInputRef}
             id="txtFile"
@@ -348,9 +502,9 @@ const DashboardPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Idioma - Combobox */}
+        {/* Idioma */}
         <div className="lang-select" style={{alignItems:'stretch'}}>
-          <label htmlFor="langSelect" className="btn" style={{display:'inline-flex',gap:10,alignItems:'center',background:'#fff'}}>
+          <label htmlFor="langSelect" className="btn lang-label" style={{display:'inline-flex',gap:10,alignItems:'center'}}>
             <Icon.Globe/> Idioma
           </label>
           <select
@@ -371,13 +525,13 @@ const DashboardPage: React.FC = () => {
 
         {/* Acciones */}
         <div className="actions">
-          <button className="btn btn--primary" onClick={onProcess} disabled={loading}>
+          <button className="btn btn--primary" onClick={onProcess} disabled={!selectedFile || loading}>
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
               <Icon.Play/>{loading ? 'Procesando…' : 'Procesar'}
             </span>
           </button>
           <button
-            className="btn"
+            className="btn btn--warning"
             onClick={() => {
               setSelectedFile(null);
               setRawText('');
@@ -385,6 +539,7 @@ const DashboardPage: React.FC = () => {
               setErrorMsg(null);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
+            disabled={!selectedFile}
           >
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
               <Icon.Broom/>Limpiar
@@ -393,9 +548,9 @@ const DashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Contenido del TXT — no editable, borde grueso */}
+      {/* Contenido del TXT */}
       <section className="card">
-        <div className="card__header">Contenido del TXT</div>
+        <div className="card__header">Contenido del documento cargado</div>
         <div className="card__body">
           <div
             className="raw-view raw-view--readonly"
@@ -416,7 +571,7 @@ const DashboardPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Resultados — contenedor con borde grueso */}
+      {/* Resultados */}
       <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
         <div className="card__header">Resultados del análisis léxico</div>
         <div className="card__body">
@@ -424,20 +579,32 @@ const DashboardPage: React.FC = () => {
           {!result ? (
             <div className="muted">Carga un .txt, elige un idioma y pulsa <strong>Procesar</strong>.</div>
           ) : (
-            <div className="grid-2">
-              <div>
-                <div className="metric"><span>Total de palabras</span><strong>{result.totalWords}</strong></div>
-                <div className="metric"><span>Más repetidas</span><div>{topOrEmpty(result.topWords)}</div></div>
-                <div className="metric"><span>Menos repetidas</span><div>{topOrEmpty(result.rareWords)}</div></div>
-                <div className="metric"><span>Pronombres personales</span><div>{listOrEmpty(result.pronouns)}</div></div>
+            <>
+              <div className="grid-2">
+                <div>
+                  <div className="metric"><span>Total de palabras</span><strong>{result.totalWords}</strong></div>
+                  <div className="metric"><span>Más repetidas</span><div>{topOrEmpty(result.topWords)}</div></div>
+                  <div className="metric"><span>Menos repetidas</span><div>{topOrEmpty(result.rareWords)}</div></div>
+                  <div className="metric"><span>Pronombres personales</span><div>{listOrEmpty(result.pronouns)}</div></div>
+                </div>
+                <div>
+                  <div className="metric"><span>Nombres de personas</span><div>{listOrEmpty(result.persons)}</div></div>
+                  <div className="metric"><span>Sustantivos (forma raíz)</span><div>{listOrEmpty(result.nounsLemma)}</div></div>
+                  <div className="metric"><span>Verbos (forma raíz)</span><div>{listOrEmpty(result.verbsLemma)}</div></div>
+                  <div className="metric"><span>Otras clasificaciones</span><div>{result.other ? JSON.stringify(result.other) : '—'}</div></div>
+                </div>
               </div>
-              <div>
-                <div className="metric"><span>Nombres de personas</span><div>{listOrEmpty(result.persons)}</div></div>
-                <div className="metric"><span>Sustantivos (forma raíz)</span><div>{listOrEmpty(result.nounsLemma)}</div></div>
-                <div className="metric"><span>Verbos (forma raíz)</span><div>{listOrEmpty(result.verbsLemma)}</div></div>
-                <div className="metric"><span>Otras clasificaciones</span><div>{result.other ? JSON.stringify(result.other) : '—'}</div></div>
+
+              {/* Gráficos */}
+              <div className="charts-grid">
+                  <ChartCard title="Palabras más repetidas"    data={dataTop}      color={GREEN.dark} />
+                  <ChartCard title="Palabras menos repetidas"   data={dataRare}     color={GREEN.light} />
+                  <ChartCard title="Pronombres personales (frecuencia)" data={dataPronouns} color={GREEN.mid} />
+                  <ChartCard title="Nombres de personas (frecuencia)"   data={dataPersons}  color={GREEN.dark} />
+                  <ChartCard title="Otras clasificaciones (resumen)"    data={dataOther}    color={GREEN.mid} />
               </div>
-            </div>
+
+            </>
           )}
         </div>
       </section>
