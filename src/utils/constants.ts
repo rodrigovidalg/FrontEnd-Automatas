@@ -20,7 +20,7 @@ export const API_ROUTES = {
   LOGIN: '/api/Auth/login',      // <— coincide con Swagger
   REGISTER: '/api/Auth/register', // si tu register es /api/Auth/register
   FACE_LOGIN: '/api/Auth/face-login',
-  QR_LOGIN: '/api/Auth/qr-login',
+  QR_LOGIN: '/api/Qr/login-qr/carnet',
   RESET_PASSWORD: '/api/Auth/reset-password',
 
    // === Facial ===

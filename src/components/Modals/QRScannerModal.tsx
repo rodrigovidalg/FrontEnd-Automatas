@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import jsQR from 'jsqr';
+import { useAuth } from '../../context/AuthContext';
 
 const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () => void }) => {
+  const { loginWithQR } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanningRef = useRef<number | null>(null);
-  
+
   const [scanStatus, setScanStatus] = useState<'ready' | 'scanning' | 'success' | 'error'>('ready');
   const [statusMessage, setStatusMessage] = useState('');
   const [torch, setTorch] = useState(false);
@@ -18,28 +21,56 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
     bg: '#F5F5F5'
   };
 
+  // -------- Cámara: iniciar / detener ----------
   const startCamera = useCallback(async () => {
     try {
+      setScanStatus('ready');
+      setStatusMessage('Preparando cámara...');
+
       const constraints = {
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: 'environment' as const
+          facingMode: { ideal: 'environment' } as const
         },
         audio: false
       };
-      
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await new Promise<void>(resolve => {
-          if (videoRef.current) {
-            videoRef.current.onloadedmetadata = () => resolve();
-          }
-        });
+
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+
+      // Espera a que el <video> tenga metadata (dimensiones reales)
+      await new Promise<void>((resolve) => {
+        const v = videoRef.current!;
+        if (v.readyState >= 1) {
+          resolve();
+        } else {
+          const onLoaded = () => {
+            v.removeEventListener('loadedmetadata', onLoaded);
+            resolve();
+          };
+          v.addEventListener('loadedmetadata', onLoaded, { once: true });
+        }
+      });
+
+      // Ajusta el canvas al tamaño real del video
+      if (canvasRef.current && videoRef.current) {
+        const w = videoRef.current.videoWidth || 640;
+        const h = videoRef.current.videoHeight || 480;
+        canvasRef.current.width = w;
+        canvasRef.current.height = h;
       }
+
+      // Intenta reproducir el video
+      await videoRef.current.play();
+
+      // Arranca el escaneo inmediatamente
+      setScanStatus('scanning');
+      setStatusMessage('Escaneando...');
+      startScanning();
     } catch (error) {
       console.error('Error accessing camera:', error);
       setScanStatus('error');
@@ -50,6 +81,7 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
   const stopCamera = useCallback(() => {
     if (scanningRef.current) {
       cancelAnimationFrame(scanningRef.current);
+      scanningRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -57,48 +89,85 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
     }
   }, []);
 
+  // -------- Bucle de escaneo ----------
   const startScanning = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
 
-    const context = canvasRef.current.getContext('2d');
+    const context = canvas.getContext('2d');
     if (!context) return;
 
-    canvasRef.current.width = videoRef.current.videoWidth;
-    canvasRef.current.height = videoRef.current.videoHeight;
-
-    setScanStatus('scanning');
-
     const scan = () => {
-      if (!videoRef.current || !canvasRef.current || !context) return;
-
-      context.drawImage(videoRef.current, 0, 0);
-      
-      const imageData = context.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
-      const data = imageData.data;
-      
-      let darkPixels = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        if (brightness < 100) darkPixels++;
-      }
-
-      const qrLikelihood = darkPixels / (data.length / 4);
-      if (qrLikelihood > 0.15 && qrLikelihood < 0.45) {
-        setScanStatus('success');
-        setStatusMessage('✓ Código QR válido');
-        stopCamera();
-        setTimeout(() => {
-          onClose();
-        }, 2000);
+      if (!videoRef.current || !canvasRef.current) {
+        scanningRef.current = requestAnimationFrame(scan);
         return;
       }
 
+      // Asegura que el video ya tenga frames
+      if (video.readyState < 2) {
+        scanningRef.current = requestAnimationFrame(scan);
+        return;
+      }
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+      try {
+        const code = jsQR(
+          imageData.data,
+          imageData.width,
+          imageData.height,
+          { inversionAttempts: 'dontInvert' }
+        );
+
+        if (code && code.data) {
+          // 1) Detener escaneo/cámara
+          if (scanningRef.current) cancelAnimationFrame(scanningRef.current);
+          scanningRef.current = null;
+
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+          }
+
+          setScanStatus('success');
+          setStatusMessage('Código detectado, iniciando sesión...');
+
+          // 2) Intentar login (sin await para no convertir el loop en async)
+          loginWithQR(code.data)
+            .then((ok) => {
+              if (ok) {
+                setStatusMessage('¡Login exitoso! Redirigiendo...');
+                setTimeout(() => onClose(), 500);
+              } else {
+                setScanStatus('error');
+                setStatusMessage('El QR no fue válido para iniciar sesión.');
+              }
+            })
+            .catch((e) => {
+              console.error('Error en login QR:', e);
+              setScanStatus('error');
+              setStatusMessage('Ocurrió un error al iniciar sesión con QR.');
+            });
+
+          return; // salir del bucle tras detectar código
+        }
+      } catch (e) {
+        console.error('Error decodificando QR:', e);
+      }
+
+      // Continuar escaneando
       scanningRef.current = requestAnimationFrame(scan);
     };
 
+    // Primer tick
+    if (scanningRef.current) cancelAnimationFrame(scanningRef.current);
     scanningRef.current = requestAnimationFrame(scan);
-  }, [stopCamera, onClose]);
+  }, [loginWithQR, onClose]);
 
+  // -------- Linterna ----------
   const toggleTorch = async () => {
     if (!streamRef.current) return;
 
@@ -114,26 +183,19 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
     }
   };
 
+  // -------- Reintentar ----------
   const handleRetry = useCallback(() => {
-    setScanStatus('ready');
-    setStatusMessage('');
-    if (videoRef.current && videoRef.current.readyState === 2) {
-      startScanning();
-    }
-  }, [startScanning]);
+    stopCamera();
+    startCamera();
+  }, [startCamera, stopCamera]);
 
+  // -------- Ciclo de vida del modal ----------
   useEffect(() => {
     if (isActive) {
       startCamera();
       return () => stopCamera();
     }
   }, [isActive, startCamera, stopCamera]);
-
-  useEffect(() => {
-    if (scanStatus === 'scanning' && videoRef.current?.readyState === 2) {
-      startScanning();
-    }
-  }, [scanStatus, startScanning]);
 
   if (!isActive) return null;
 
@@ -150,21 +212,10 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
       animation: 'fadeIn 0.3s ease-out'
     }}>
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-        @keyframes scanLine {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(100%); }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+        @keyframes scanLine { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       <div style={{
@@ -173,7 +224,7 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
         overflow: 'hidden',
         width: '90%',
         maxWidth: '500px',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+        boxShadow: '0 20px 60px rgba(0,0,0,.3)',
         animation: 'fadeIn 0.4s ease-out'
       }}>
         {/* Header */}
@@ -188,7 +239,7 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
           <h2 style={{
             margin: 0,
             fontSize: '20px',
-            fontWeight: '600',
+            fontWeight: 600,
             color: colors.dark,
             display: 'flex',
             alignItems: 'center',
@@ -200,101 +251,59 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
           <button
             onClick={onClose}
             style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-              color: colors.gray,
-              transition: 'all 0.3s ease',
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: '4px', color: colors.gray, transition: 'all .3s ease',
               fontSize: '24px'
             }}
-            onMouseEnter={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.color = colors.dark;
-            }}
-            onMouseLeave={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.color = colors.gray;
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = colors.dark; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = colors.gray; }}
           >
             ✕
           </button>
         </div>
 
         {/* Camera Container */}
-        <div style={{
-          position: 'relative',
-          backgroundColor: colors.dark,
-          aspectRatio: '1',
-          overflow: 'hidden'
-        }}>
+        <div style={{ position: 'relative', backgroundColor: colors.dark, aspectRatio: '1', overflow: 'hidden' }}>
           <video
             ref={videoRef}
             autoPlay
             muted
             playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: 'block'
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
           />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
 
           {/* QR Frame Overlay */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'none'
-          }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div style={{
               position: 'relative',
               width: '250px',
               height: '250px',
               border: `3px solid ${colors.primary}`,
               borderRadius: '12px',
-              boxShadow: `inset 0 0 0 5000px rgba(0, 0, 0, 0.3)`,
+              boxShadow: 'inset 0 0 0 5000px rgba(0,0,0,.3)',
               background: 'transparent'
             }}>
-              {/* Corners */}
               {[0, 1, 2, 3].map((i) => {
-                const cornerStyles = [
+                const corner = [
                   { top: '-3px', left: '-3px', borderWidth: '3px 0 0 3px' },
                   { top: '-3px', right: '-3px', borderWidth: '3px 3px 0 0' },
                   { bottom: '-3px', left: '-3px', borderWidth: '0 0 3px 3px' },
                   { bottom: '-3px', right: '-3px', borderWidth: '0 3px 3px 0' }
-                ];
-
+                ][i];
                 return (
-                  <div
-                    key={i}
-                    style={{
-                      position: 'absolute',
-                      width: '30px',
-                      height: '30px',
-                      borderColor: colors.primary,
-                      borderStyle: 'solid',
-                      ...cornerStyles[i]
-                    } as React.CSSProperties}
-                  />
+                  <div key={i} style={{
+                    position: 'absolute', width: '30px', height: '30px',
+                    borderColor: colors.primary, borderStyle: 'solid', ...(corner as React.CSSProperties)
+                  }} />
                 );
               })}
 
-              {/* Scan Line */}
               {scanStatus === 'scanning' && (
                 <div style={{
-                  position: 'absolute',
-                  width: '100%',
-                  height: '2px',
-                  backgroundColor: colors.primary,
-                  left: 0,
-                  animation: 'scanLine 2s infinite',
-                  boxShadow: `0 0 10px ${colors.primary}`,
-                  opacity: 0.8
+                  position: 'absolute', width: '100%', height: '2px',
+                  backgroundColor: colors.primary, left: 0,
+                  animation: 'scanLine 2s infinite', boxShadow: `0 0 10px ${colors.primary}`, opacity: .8
                 }} />
               )}
             </div>
@@ -305,20 +314,11 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
             <button
               onClick={toggleTorch}
               style={{
-                position: 'absolute',
-                bottom: '20px',
-                right: '20px',
-                background: torch ? colors.primary : 'rgba(255, 255, 255, 0.2)',
-                border: 'none',
-                color: '#fff',
-                padding: '12px 16px',
-                borderRadius: '50%',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '20px'
+                position: 'absolute', bottom: '20px', right: '20px',
+                background: torch ? colors.primary : 'rgba(255,255,255,.2)',
+                border: 'none', color: '#fff', padding: '12px 16px',
+                borderRadius: '50%', cursor: 'pointer', transition: 'all .3s ease',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px'
               }}
             >
               💡
@@ -327,21 +327,10 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
         </div>
 
         {/* Status Section */}
-        <div style={{
-          padding: '24px',
-          backgroundColor: '#fff',
-          textAlign: 'center'
-        }}>
+        <div style={{ padding: '24px', backgroundColor: '#fff', textAlign: 'center' }}>
           {scanStatus === 'scanning' && (
             <div style={{ animation: 'pulse 2s infinite' }}>
-              <div style={{
-                margin: '0 auto 12px',
-                fontSize: '40px',
-                animation: 'spin 2s linear infinite',
-                display: 'inline-block'
-              }}>
-                ⊙
-              </div>
+              <div style={{ margin: '0 auto 12px', fontSize: '40px', animation: 'spin 2s linear infinite', display: 'inline-block' }}>⊙</div>
               <p style={{ margin: 0, color: colors.gray, fontSize: '14px' }}>
                 Posiciona tu código QR dentro del marco
               </p>
@@ -350,15 +339,8 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
 
           {scanStatus === 'success' && (
             <div>
-              <div style={{ margin: '0 auto 12px', fontSize: '48px' }}>
-                ✓
-              </div>
-              <p style={{
-                margin: 0,
-                color: colors.primary,
-                fontSize: '16px',
-                fontWeight: '600'
-              }}>
+              <div style={{ margin: '0 auto 12px', fontSize: '48px' }}>✓</div>
+              <p style={{ margin: 0, color: colors.primary, fontSize: '16px', fontWeight: 600 }}>
                 {statusMessage}
               </p>
               <p style={{ margin: '8px 0 0', color: colors.gray, fontSize: '13px' }}>
@@ -369,39 +351,20 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
 
           {scanStatus === 'error' && (
             <div>
-              <div style={{ margin: '0 auto 12px', fontSize: '48px' }}>
-                ⚠
-              </div>
-              <p style={{
-                margin: 0,
-                color: '#e74c3c',
-                fontSize: '16px',
-                fontWeight: '600'
-              }}>
+              <div style={{ margin: '0 auto 12px', fontSize: '48px' }}>⚠</div>
+              <p style={{ margin: 0, color: '#e74c3c', fontSize: '16px', fontWeight: 600 }}>
                 {statusMessage}
               </p>
               <button
                 onClick={handleRetry}
                 style={{
-                  marginTop: '16px',
-                  padding: '10px 24px',
-                  backgroundColor: colors.primary,
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  transition: 'all 0.3s ease'
+                  marginTop: '16px', padding: '10px 24px',
+                  backgroundColor: colors.primary, color: '#fff',
+                  border: 'none', borderRadius: '8px', cursor: 'pointer',
+                  fontSize: '14px', fontWeight: 600, transition: 'all .3s ease'
                 }}
-                onMouseEnter={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = colors.gray;
-                }}
-                onMouseLeave={(e) => {
-                  const target = e.currentTarget as HTMLButtonElement;
-                  target.style.backgroundColor = colors.primary;
-                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.gray; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = colors.primary; }}
               >
                 Reintentar
               </button>
@@ -410,7 +373,7 @@ const QRScannerModal = ({ isActive, onClose }: { isActive: boolean; onClose: () 
 
           {scanStatus === 'ready' && (
             <p style={{ margin: 0, color: colors.gray, fontSize: '14px' }}>
-              Preparando cámara...
+              {statusMessage || 'Preparando cámara...'}
             </p>
           )}
         </div>

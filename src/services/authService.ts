@@ -16,6 +16,25 @@ export interface LoginResponse {
   user: BackendUser;  // mapeado desde "usuario" (objeto)
 }
 
+
+// ⬇⬇⬇ NUEVO: login por QR
+export async function loginByQr(codigoQr: string): Promise<LoginResponse> {
+  const body = { codigoQr }; // el backend hace binding case-insensitive
+  const raw = await apiFetch<BackendLoginRaw>(API_ROUTES.QR_LOGIN, { json: body });
+
+  return {
+    token: raw.accessToken,
+    user: {
+      id: raw.usuario.id,
+      usuario: raw.usuario.usuario,
+      email: raw.usuario.email,
+      nombreCompleto: raw.usuario.nombreCompleto,
+      telefono: raw.usuario.telefono,
+      role: raw.usuario.role
+    }
+  };
+}
+
 export interface RegisterResponse {
   message?: string;
   user?: BackendUser;
@@ -79,3 +98,5 @@ export function me(token: string): Promise<BackendUser> {
 
 // Alias para compatibilidad con AuthContext
 export { loginApi as login, registerApi as register };
+
+

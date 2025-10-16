@@ -41,6 +41,14 @@ const AppContent: React.FC = () => {
 
   const navigate = useNavigate();
 
+  // Redirige al dashboard cuando el usuario se autentica (cubre QR, rostro y clave)
+useEffect(() => {
+  if (authState.isAuthenticated) {
+    navigate('/dashboard', { replace: true });
+  }
+}, [authState.isAuthenticated, navigate]);
+
+
   // 🔁 Si el login fue exitoso, envía al Dashboard
 
 

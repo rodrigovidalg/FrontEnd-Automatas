@@ -9,9 +9,10 @@ export const BASE = String(RAW_BASE).replace(/\s+$/g, '').replace(/\/+$/, ''); /
 
 // ===== Helpers ========================================================
 export function authHeaders() {
-  const t = localStorage.getItem('token');
+  const t = localStorage.getItem('auth_token') || localStorage.getItem('token');
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
+
 
 export function buildUrl(pathOrUrl: string) {
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
