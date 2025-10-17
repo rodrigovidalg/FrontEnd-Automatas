@@ -1,5 +1,5 @@
 // src/components/dashboard/DashboardPage.tsx
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './dashboard.css';
 import {
@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 
 type LangISO = 'es' | 'en' | 'ru';
+type UiLang = 'es' | 'en' | 'ru';
 type FreqItem = { word: string; count: number };
 
 type AnalysisResult = {
@@ -25,6 +26,117 @@ type AnalysisResult = {
   nounsLemma: string[];
   verbsLemma: string[];
   other?: Record<string, any>;
+};
+
+/* =======================
+ *  i18n simple (interfaz)
+ * ======================= */
+const UI_STR: Record<UiLang, any> = {
+  es: {
+    title: 'Análisis y Dashboard Léxico',
+    subtitle: 'Frontend · Visualización · Reportes · Dashboard',
+    welcome: 'Bienvenido',
+    uiLangLabel: 'Interfaz',
+    analysisLangLabel: 'Idioma',
+    uploadTxt: 'Cargar .txt',
+    format: 'Formato',
+    process: 'Procesar',
+    processing: 'Procesando…',
+    clear: 'Limpiar',
+    export: 'Exportar',
+    exportTipOK: 'Exportar resultados',
+    exportTipNO: 'Exportar (deshabilitado)',
+    refresh: 'Actualizar',
+    logout: 'Cerrar sesión',
+    contentHeader: 'Contenido del documento cargado',
+    placeholder: 'Aquí se mostrará el contenido del archivo .txt',
+    resultsHeader: 'Resultados del análisis léxico',
+    preProcessHint: 'Carga un .txt, elige un idioma y pulsa ',
+    metrics: {
+      total: 'Total de palabras',
+      pronouns: 'Pronombres distintos',
+      persons: 'Personas distintas',
+      nouns: 'Sustantivos (raíz)',
+      verbs: 'Verbos (raíz)',
+      topUnique: 'Top únicas',
+    },
+    charts: {
+      top: 'Top palabras',
+      rare: 'Palabras raras',
+      pronouns: 'Pronombres',
+      persons: 'Personas detectadas',
+    },
+  },
+  en: {
+    title: 'Lexical Analysis Dashboard',
+    subtitle: 'Frontend · Visualization · Reports · Dashboard',
+    welcome: 'Welcome',
+    uiLangLabel: 'Interface',
+    analysisLangLabel: 'Language',
+    uploadTxt: 'Upload .txt',
+    format: 'Format',
+    process: 'Process',
+    processing: 'Processing…',
+    clear: 'Clear',
+    export: 'Export',
+    exportTipOK: 'Export results',
+    exportTipNO: 'Export (disabled)',
+    refresh: 'Refresh',
+    logout: 'Sign out',
+    contentHeader: 'Loaded document content',
+    placeholder: 'The contents of the .txt file will appear here',
+    resultsHeader: 'Lexical analysis results',
+    preProcessHint: 'Upload a .txt, choose a language and click ',
+    metrics: {
+      total: 'Total words',
+      pronouns: 'Distinct pronouns',
+      persons: 'Distinct persons',
+      nouns: 'Nouns (lemma)',
+      verbs: 'Verbs (lemma)',
+      topUnique: 'Top unique',
+    },
+    charts: {
+      top: 'Top words',
+      rare: 'Rare words',
+      pronouns: 'Pronouns',
+      persons: 'Detected persons',
+    },
+  },
+  ru: {
+    title: 'Лексический анализ — Дашборд',
+    subtitle: 'Фронтенд · Визуализация · Отчёты · Дашборд',
+    welcome: 'Добро пожаловать',
+    uiLangLabel: 'Интерфейс',
+    analysisLangLabel: 'Язык',
+    uploadTxt: 'Загрузить .txt',
+    format: 'Формат',
+    process: 'Обработать',
+    processing: 'Обработка…',
+    clear: 'Очистить',
+    export: 'Экспорт',
+    exportTipOK: 'Экспортировать результаты',
+    exportTipNO: 'Экспорт (выключен)',
+    refresh: 'Обновить',
+    logout: 'Выйти',
+    contentHeader: 'Содержимое загруженного документа',
+    placeholder: 'Здесь появится содержимое файла .txt',
+    resultsHeader: 'Результаты лексического анализа',
+    preProcessHint: 'Загрузите .txt, выберите язык и нажмите ',
+    metrics: {
+      total: 'Всего слов',
+      pronouns: 'Местоимения (разные)',
+      persons: 'Персоны (разные)',
+      nouns: 'Существительные (лемма)',
+      verbs: 'Глаголы (лемма)',
+      topUnique: 'Топ (уникальные)',
+    },
+    charts: {
+      top: 'Топ слова',
+      rare: 'Редкие слова',
+      pronouns: 'Местоимения',
+      persons: 'Обнаруженные персоны',
+    },
+  },
 };
 
 /** =======================
@@ -101,7 +213,7 @@ function analyzeLocally(text: string, lang: LangISO): AnalysisResult {
   };
 }
 
-const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'Inglés', ru: 'Ruso' };
+const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'English', ru: 'Русский' };
 
 /** =======================
  *  API (con .env + proxy)
@@ -252,10 +364,10 @@ function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangIS
 
 // Colores del tema (verdes)
 const GREEN = {
-  dark:  '#2e5e54', // --primary-700
-  mid:   '#3a6f64', // --primary-600
-  light: '#447c6f', // --primary-500
-  grid:  '#e5e7eb'  // --border aprox para la cuadrícula
+  dark:  '#2e5e54',
+  mid:   '#3a6f64',
+  light: '#447c6f',
+  grid:  '#e5e7eb'
 };
 
 /** =======================
@@ -276,12 +388,23 @@ const DashboardPage: React.FC = () => {
         sessionStorage.clear();
       }
     } finally {
-      // Ajusta esta ruta si tu pantalla de login es otra
       window.location.href = '/login';
     }
   };
 
+  // Idioma de la INTERFAZ (nuevo)
+  const [uiLang, setUiLang] = useState<UiLang>(() => {
+    const saved = localStorage.getItem('ui_lang') as UiLang | null;
+    return saved || 'es';
+  });
+  useEffect(() => {
+    localStorage.setItem('ui_lang', uiLang);
+  }, [uiLang]);
+  const T = UI_STR[uiLang];
+
+  // Idioma del ANÁLISIS (ya existente)
   const [lang, setLang] = useState<LangISO>('es');
+
   const [rawText, setRawText] = useState<string>('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -290,8 +413,8 @@ const DashboardPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const displayName = useMemo(
-    () => authState.user?.fullName || authState.user?.nickname || authState.user?.email || 'Usuario',
-    [authState.user]
+    () => authState.user?.fullName || authState.user?.nickname || authState.user?.email || (uiLang === 'en' ? 'User' : uiLang === 'ru' ? 'Пользователь' : 'Usuario'),
+    [authState.user, uiLang]
   );
 
   // Palabras normalizadas del texto (para contar pronombres y personas)
@@ -299,7 +422,7 @@ const DashboardPage: React.FC = () => {
 
   const handleFile = async (file?: File | null) => {
     if (!file) return;
-    if (!/\.txt$/i.test(file.name)) { alert('Solo se admite formato .txt'); return; }
+    if (!/\.txt$/i.test(file.name)) { alert('.txt only'); return; }
     setSelectedFile(file);
     const text = await file.text();
     setRawText(text);
@@ -308,7 +431,7 @@ const DashboardPage: React.FC = () => {
   };
 
   const onProcess = async () => {
-    if (!selectedFile) { alert('Primero carga un archivo .txt'); return; }
+    if (!selectedFile) { alert('.txt required'); return; }
     try {
       setLoading(true); setErrorMsg(null);
 
@@ -322,7 +445,7 @@ const DashboardPage: React.FC = () => {
     } catch (err: any) {
       const localResult = analyzeLocally(rawText, lang);
       setResult(localResult);
-      setErrorMsg(err?.message || 'No se pudo contactar la API — mostrando análisis local de demostración.');
+      setErrorMsg(err?.message || 'Falling back to local analysis.');
     } finally {
       setLoading(false);
     }
@@ -359,14 +482,14 @@ const DashboardPage: React.FC = () => {
   const dataOther = useMemo(() => {
     if (!result) return [];
     return [
-      { name: 'Pronombres', value: result.pronouns.length || 0 },
-      { name: 'Personas', value: result.persons.length || 0 },
-      { name: 'Sustantivos (raíz)', value: result.nounsLemma.length || 0 },
-      { name: 'Verbos (raíz)', value: result.verbsLemma.length || 0 },
-      { name: 'Top (Únicas)', value: (result.topWords || []).length },
-      { name: 'Raras (Únicas)', value: (result.rareWords || []).length },
+      { name: (T.metrics?.pronouns ?? 'Pronombres'), value: result.pronouns.length || 0 },
+      { name: (T.metrics?.persons ?? 'Personas'), value: result.persons.length || 0 },
+      { name: (T.metrics?.nouns ?? 'Sustantivos (raíz)'), value: result.nounsLemma.length || 0 },
+      { name: (T.metrics?.verbs ?? 'Verbos (raíz)'), value: result.verbsLemma.length || 0 },
+      { name: (T.metrics?.topUnique ?? 'Top únicas'), value: (result.topWords || []).length },
+      { name: (T.charts?.rare ?? 'Palabras raras'), value: (result.rareWords || []).length },
     ];
-  }, [result]);
+  }, [result, T]);
 
   const canExport = !!result && (result.totalWords ?? 0) > 0;
 
@@ -374,28 +497,28 @@ const DashboardPage: React.FC = () => {
     if (!canExport || !result) return;
     const csvLines: string[] = [];
 
-    csvLines.push('Sección,Item,Valor');
-    csvLines.push('Resumen,TotalPalabras,' + result.totalWords);
+    csvLines.push('Section,Item,Value');
+    csvLines.push('Summary,TotalWords,' + result.totalWords);
 
-    csvLines.push('TopWords,Palabra,Frecuencia');
+    csvLines.push('TopWords,Word,Count');
     for (const x of result.topWords) csvLines.push(`TopWords,${x.word},${x.count}`);
 
-    csvLines.push('RareWords,Palabra,Frecuencia');
+    csvLines.push('RareWords,Word,Count');
     for (const x of result.rareWords) csvLines.push(`RareWords,${x.word},${x.count}`);
 
-    csvLines.push('Pronombres,Pronombre,Frecuencia');
-    for (const x of dataPronouns) csvLines.push(`Pronombres,${x.name},${x.value}`);
+    csvLines.push('Pronouns,Pronoun,Count');
+    for (const x of dataPronouns) csvLines.push(`Pronouns,${x.name},${x.value}`);
 
-    csvLines.push('Personas,Nombre,Frecuencia');
-    for (const x of dataPersons) csvLines.push(`Personas,${x.name},${x.value}`);
+    csvLines.push('Persons,Name,Count');
+    for (const x of dataPersons) csvLines.push(`Persons,${x.name},${x.value}`);
 
-    csvLines.push('Otras,Clasificación,Conteo');
-    for (const x of dataOther) csvLines.push(`Otras,${x.name},${x.value}`);
+    csvLines.push('Other,Category,Count');
+    for (const x of dataOther) csvLines.push(`Other,${x.name},${x.value}`);
 
     const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'analisis_lexico.csv';
+    a.download = 'lexical_analysis.csv';
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -433,30 +556,47 @@ const DashboardPage: React.FC = () => {
       {/* Header */}
       <header className="dash__header">
         <div>
-          <h1>Análisis y Dashboard Léxico</h1>
-          <p className="dash__subtitle">Frontend · Visualización · Reportes · Dashboard</p>
+          <h1>{T.title}</h1>
+          <p className="dash__subtitle">{T.subtitle}</p>
         </div>
+
         <div className="dash__actions">
-          <span className="welcome">Bienvenido: <strong>{displayName}</strong></span>
+          {/* Selector de idioma de la INTERFAZ */}
+          <div className="lang-select" style={{alignItems:'stretch'}}>
+            <label htmlFor="uiLang" className="btn lang-label" style={{display:'inline-flex',gap:10,alignItems:'center'}}>
+              <Icon.Globe/> {T.uiLangLabel}
+            </label>
+            <select
+              id="uiLang"
+              value={uiLang}
+              onChange={(e) => setUiLang(e.target.value as UiLang)}
+              className="btn"
+              style={{ minWidth: 160 }}
+            >
+              <option value="es">Español</option>
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+            </select>
+          </div>
+
+          <span className="welcome">{T.welcome}: <strong>{displayName}</strong></span>
 
           <button
             className="btn btn--primary"
             onClick={handleExport}
             disabled={!canExport}
             aria-disabled={!canExport}
-            title={canExport ? 'Exportar resultados' : 'Exportar (deshabilitado)'}
+            title={canExport ? T.exportTipOK : T.exportTipNO}
           >
-            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Download/>Exportar</span>
+            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{T.export}</span>
           </button>
 
           <button className="btn btn--green-soft">
-            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Refresh/>Actualizar</span>
+            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{T.refresh}</span>
           </button>
 
-          <button className="btn btn--danger" onClick={handleLogout} title="Cerrar sesión">
-            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>
-              <Icon.Power/> Cerrar sesión
-            </span>
+          <button className="btn btn--danger" onClick={handleLogout} title={T.logout}>
+            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{T.logout}</span>
           </button>
         </div>
       </header>
@@ -469,10 +609,10 @@ const DashboardPage: React.FC = () => {
             type="button"
             className="btn btn--primary"
             onClick={() => fileInputRef.current?.click()}
-            aria-label="Cargar archivo .txt"
+            aria-label={T.uploadTxt}
           >
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-              <Icon.Upload/> Cargar .txt
+              {T.uploadTxt}
             </span>
           </button>
 
@@ -486,14 +626,14 @@ const DashboardPage: React.FC = () => {
           />
 
           <span className="hint" style={{display:'inline-flex',gap:6,alignItems:'center',color:'#6b7280'}}>
-            <Icon.Doc/> Formato: .txt
+            {T.format}: .txt
           </span>
         </div>
 
-        {/* Idioma */}
+        {/* Idioma del análisis */}
         <div className="lang-select" style={{alignItems:'stretch'}}>
           <label htmlFor="langSelect" className="btn lang-label" style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-            <Icon.Globe/> Idioma
+            {T.analysisLangLabel}
           </label>
           <select
             id="langSelect"
@@ -502,9 +642,9 @@ const DashboardPage: React.FC = () => {
             className="btn"
             style={{ minWidth: 180, background:'#fff', borderColor:'#e5e7eb', fontWeight:600, color:'#1f2937' }}
           >
-            <option value="es">Español (es)</option>
-            <option value="en">Inglés (en)</option>
-            <option value="ru">Ruso (ru)</option>
+            <option value="es">{LANG_LABELS.es}</option>
+            <option value="en">{LANG_LABELS.en}</option>
+            <option value="ru">{LANG_LABELS.ru}</option>
           </select>
         </div>
 
@@ -512,7 +652,7 @@ const DashboardPage: React.FC = () => {
         <div className="actions">
           <button className="btn btn--primary" onClick={onProcess} disabled={!selectedFile || loading}>
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-              <Icon.Play/>{loading ? 'Procesando…' : 'Procesar'}
+              {loading ? T.processing : T.process}
             </span>
           </button>
           <button
@@ -527,17 +667,17 @@ const DashboardPage: React.FC = () => {
             disabled={!selectedFile}
           >
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-              <Icon.Broom/>Limpiar
+              {T.clear}
             </span>
           </button>
         </div>
       </section>
 
-      {/* ✅ Dos columnas principales: Contenido TXT (izq) + Resultados (der) */}
+      {/* Dos columnas principales */}
       <div className="grid-2">
         {/* Contenido del TXT */}
         <section className="card">
-          <div className="card__header">Contenido del documento cargado</div>
+          <div className="card__header">{T.contentHeader}</div>
           <div className="card__body">
             <div
               className="raw-view raw-view--readonly"
@@ -552,7 +692,7 @@ const DashboardPage: React.FC = () => {
               }}
             >
               <pre style={{margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', color:'#111827'}}>
-                {rawText || 'Aquí se mostrará el contenido del archivo .txt'}
+                {rawText || T.placeholder}
               </pre>
             </div>
           </div>
@@ -560,29 +700,31 @@ const DashboardPage: React.FC = () => {
 
         {/* Resultados */}
         <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
-          <div className="card__header">Resultados del análisis léxico</div>
+          <div className="card__header">{T.resultsHeader}</div>
           <div className="card__body">
             {errorMsg && <div className="alert">{errorMsg}</div>}
             {!result ? (
-              <div className="muted">Carga un .txt, elige un idioma y pulsa <strong>Procesar</strong>.</div>
+              <div className="muted">
+                {T.preProcessHint}<strong>{T.process}</strong>.
+              </div>
             ) : (
               <>
                 {/* Métricas rápidas */}
                 <div className="grid-2">
-                  <div className="metric"><span>Total de palabras</span><strong>{result.totalWords}</strong></div>
-                  <div className="metric"><span>Pronombres distintos</span><strong>{result.pronouns.length}</strong></div>
-                  <div className="metric"><span>Personas distintas</span><strong>{result.persons.length}</strong></div>
-                  <div className="metric"><span>Sustantivos (raíz)</span><strong>{result.nounsLemma.length}</strong></div>
-                  <div className="metric"><span>Verbos (raíz)</span><strong>{result.verbsLemma.length}</strong></div>
-                  <div className="metric"><span>Top únicas</span><strong>{result.topWords.length}</strong></div>
+                  <div className="metric"><span>{T.metrics.total}</span><strong>{result.totalWords}</strong></div>
+                  <div className="metric"><span>{T.metrics.pronouns}</span><strong>{result.pronouns.length}</strong></div>
+                  <div className="metric"><span>{T.metrics.persons}</span><strong>{result.persons.length}</strong></div>
+                  <div className="metric"><span>{T.metrics.nouns}</span><strong>{result.nounsLemma.length}</strong></div>
+                  <div className="metric"><span>{T.metrics.verbs}</span><strong>{result.verbsLemma.length}</strong></div>
+                  <div className="metric"><span>{T.metrics.topUnique}</span><strong>{result.topWords.length}</strong></div>
                 </div>
 
                 {/* Gráficos */}
                 <div className="charts-grid">
-                  <ChartCard title="Top palabras" data={dataTop} />
-                  <ChartCard title="Palabras raras" data={dataRare} color={GREEN.mid} />
-                  <ChartCard title="Pronombres" data={dataPronouns} color={GREEN.light} />
-                  <ChartCard title="Personas detectadas" data={dataPersons} color={GREEN.dark} />
+                  <ChartCard title={T.charts.top} data={dataTop} />
+                  <ChartCard title={T.charts.rare} data={dataRare} color={GREEN.mid} />
+                  <ChartCard title={T.charts.pronouns} data={dataPronouns} color={GREEN.light} />
+                  <ChartCard title={T.charts.persons} data={dataPersons} color={GREEN.dark} />
                 </div>
               </>
             )}

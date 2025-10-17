@@ -44,7 +44,7 @@
 }
 .dash .dash__header h1{ margin:0; text-shadow:0 10px 30px rgba(58,111,100,.12); }
 .dash .dash__subtitle{ margin:6px 0 0 0; color:var(--muted) }
-.dash .dash__actions{ display:flex; align-items:center; gap:12px }
+.dash .dash__actions{ display:flex; align-items:center; gap:12px; flex-wrap: wrap; }
 .dash .welcome{
   background: linear-gradient(180deg,#f4fbf8,#eaf4f0);
   border:1px solid #d9ebe6;
@@ -70,14 +70,8 @@
   border-color: transparent;
   box-shadow: 0 18px 40px rgba(245,158,11,.22);
 }
-.dash .btn--warning:hover{
-  background: #d97706;
-}
-.dash .btn--warning:focus-visible{
-  outline: none;
-  box-shadow: var(--shadow), 0 0 0 4px rgba(245,158,11,.25);
-}
-
+.dash .btn--warning:hover{ background: #d97706; }
+.dash .btn--warning:focus-visible{ outline: none; box-shadow: var(--shadow), 0 0 0 4px rgba(245,158,11,.25); }
 .dash .btn--primary:hover{ background:var(--primary-600); }
 
 /* ===== Barra superior ===== */
@@ -100,7 +94,7 @@
   font-size:.92rem;
 }
 
-/* Idioma (combobox) */
+/* Idiomas (combobox) */
 .dash .lang-select{ display:flex; align-items:center; gap:12px; }
 .dash .lang-select .btn{ background:#fff; }
 
@@ -122,7 +116,7 @@
 }
 .dash select.btn:focus{ box-shadow: var(--shadow), var(--ring); }
 
-/* Acciones (a la derecha, tipo panel flotante) */
+/* Acciones (a la derecha) */
 .dash .actions{
   display:flex; flex-direction:column; gap:12px; justify-self:end; align-self:start;
   position: sticky; top:14px;
@@ -141,7 +135,7 @@
 }
 .dash .card__body{ padding:16px; }
 
-/* Borde grueso opcional para cualquier card (si quieres quitar inline styles) */
+/* Borde grueso opcional */
 .dash .card--thick{
   border-width:2.5px; border-style:solid; border-color:var(--border-strong);
 }
@@ -187,7 +181,7 @@
   .dash .actions{ position:static; justify-self:stretch; flex-direction:row; }
   .dash .actions .btn{ width:auto; flex:1; }
   .dash .dash__header{ flex-direction: column; align-items: flex-start; gap:8px; }
-  /* ⚠️ Hacemos que las dos columnas principales se apilen también en tablets/chicos */
+  /* apilar 2 columnas */
   .dash .grid-2{ grid-template-columns: 1fr; }
   .dash .charts-grid{ grid-template-columns: 1fr; }
 }
@@ -201,9 +195,7 @@
 /* Micro-animaciones */
 .dash .btn { will-change: transform, box-shadow; }
 
-/* ===== Mejoras solicitadas ===== */
-
-/* Label "Idioma" con color distinto al select */
+/* ===== Mejoras & estados ===== */
 .dash .lang-label {
   background: var(--primary-100);
   color: var(--primary-700);
@@ -211,14 +203,13 @@
   font-weight: 700;
 }
 
-/* Botones deshabilitados: "color abstracto" y bloqueo de hover */
+/* Botones deshabilitados */
 .dash .btn:disabled,
 .dash .btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: .75;
   transform: none;
   box-shadow: var(--shadow-sm);
-  /* Patrón suave tipo "abstracto" */
   background: repeating-linear-gradient(
     45deg,
     #e5e7eb,
@@ -236,54 +227,19 @@
   --danger-600: #dc2626;
   --danger-100: #fee2e2;
 }
-
-/* Botón de cerrar sesión en rojo */
-.dash .btn--danger{
-  background: var(--danger-700);
-  color:#fff;
-  border-color: transparent;
-  box-shadow: 0 18px 40px rgba(185,28,28,.18);
-}
-.dash .btn--danger:hover{
-  background: var(--danger-600);
-}
-.dash .btn--danger:focus-visible{
-  outline: none;
-  box-shadow: var(--shadow), 0 0 0 4px rgba(220,38,38,.20);
-}
+.dash .btn--danger{ background: var(--danger-700); color:#fff; border-color: transparent; box-shadow: 0 18px 40px rgba(185,28,28,.18); }
+.dash .btn--danger:hover{ background: var(--danger-600); }
+.dash .btn--danger:focus-visible{ outline: none; box-shadow: var(--shadow), 0 0 0 4px rgba(220,38,38,.20); }
 
 /* Títulos en verde del tema */
-.dash h1{
-  color: var(--primary-700);
-}
-.dash .card__header{
-  color: var(--primary-700);
-  font-weight: 800;
-}
+.dash h1{ color: var(--primary-700); }
+.dash .card__header{ color: var(--primary-700); font-weight: 800; }
 
 /* Estado general deshabilitado */
-.dash .btn:disabled{
-  opacity: .65;
-  cursor: not-allowed;
-  box-shadow: none;
-  filter: saturate(.2);
-}
-/* Procesar (verde) deshabilitado: gris claro */
-.dash .btn--primary:disabled{
-  background: #e5e7eb;    /* gris claro */
-  color: #9ca3af;         /* gris texto */
-  border-color: #e5e7eb;
-}
-.dash .btn--primary:disabled:hover{
-  background: #e5e7eb;
-}
-/* Limpiar (amarillo) deshabilitado: gris claro */
-.dash .btn--warning:disabled{
-  background: #e5e7eb;
-  color: #9ca3af;
-  border-color: #e5e7eb;
-  box-shadow: none;
-}
-.dash .btn--warning:disabled:hover{
-  background: #e5e7eb;
-}
+.dash .btn:disabled{ opacity: .65; cursor: not-allowed; box-shadow: none; filter: saturate(.2); }
+/* Procesar deshabilitado: gris claro */
+.dash .btn--primary:disabled{ background: #e5e7eb; color: #9ca3af; border-color: #e5e7eb; }
+.dash .btn--primary:disabled:hover{ background: #e5e7eb; }
+/* Limpiar deshabilitado */
+.dash .btn--warning:disabled{ background: #e5e7eb; color: #9ca3af; border-color: #e5e7eb; box-shadow: none; }
+.dash .btn--warning:disabled:hover{ background: #e5e7eb; }
