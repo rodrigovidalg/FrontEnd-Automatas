@@ -155,7 +155,6 @@ const Icon = {
       <path d="M12 2v8m6.364-4.364A8 8 0 1 1 5.636 5.636" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   )
-
 };
 
 /** =======================
@@ -264,23 +263,23 @@ const GREEN = {
  *  ======================= */
 const DashboardPage: React.FC = () => {
   const auth: any = useAuth();
-const { authState } = auth;
-const logoutFn: undefined | (() => Promise<void> | void) =
-  auth?.logout || auth?.signOut || auth?.logOut;
+  const { authState } = auth;
+  const logoutFn: undefined | (() => Promise<void> | void) =
+    auth?.logout || auth?.signOut || auth?.logOut;
 
-const handleLogout = async () => {
-  try {
-    if (typeof logoutFn === 'function') {
-      await logoutFn();
-    } else {
-      localStorage.clear();
-      sessionStorage.clear();
+  const handleLogout = async () => {
+    try {
+      if (typeof logoutFn === 'function') {
+        await logoutFn();
+      } else {
+        localStorage.clear();
+        sessionStorage.clear();
+      }
+    } finally {
+      // Ajusta esta ruta si tu pantalla de login es otra
+      window.location.href = '/login';
     }
-  } finally {
-    // Ajusta esta ruta si tu pantalla de login es otra
-    window.location.href = '/login';
-  }
-};
+  };
 
   const [lang, setLang] = useState<LangISO>('es');
   const [rawText, setRawText] = useState<string>('');
@@ -329,17 +328,11 @@ const handleLogout = async () => {
     }
   };
 
-  const topOrEmpty = (arr?: FreqItem[]) => (arr ?? []).map(({ word, count }) => `${word} (${count})`).join(', ') || '—';
-  const listOrEmpty = (arr?: string[]) => (arr && arr.length ? arr.join(', ') : '—');
-
-  /** ====== Datos para gráficos ====== */
-  // Top / Rare
   const dataTop = useMemo(() =>
     (result?.topWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
   const dataRare = useMemo(() =>
     (result?.rareWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
 
-  // Pronombres: contamos frecuencia real en el texto
   const dataPronouns = useMemo(() => {
     if (!result) return [];
     const set = new Set(PRONOUNS[lang].map(p => p.toLowerCase()));
@@ -351,7 +344,6 @@ const handleLogout = async () => {
       .slice(0, 15);
   }, [result, lang, normalizedWords]);
 
-  // Personas: contamos apariciones (case-insensitive)
   const dataPersons = useMemo(() => {
     if (!result) return [];
     const set = new Set(result.persons.map(p => p.toLowerCase()));
@@ -364,10 +356,9 @@ const handleLogout = async () => {
       .slice(0, 15);
   }, [result, normalizedWords]);
 
-  // Otras clasificaciones: resumen por categorías
   const dataOther = useMemo(() => {
     if (!result) return [];
-    const items = [
+    return [
       { name: 'Pronombres', value: result.pronouns.length || 0 },
       { name: 'Personas', value: result.persons.length || 0 },
       { name: 'Sustantivos (raíz)', value: result.nounsLemma.length || 0 },
@@ -375,10 +366,8 @@ const handleLogout = async () => {
       { name: 'Top (Únicas)', value: (result.topWords || []).length },
       { name: 'Raras (Únicas)', value: (result.rareWords || []).length },
     ];
-    return items;
   }, [result]);
 
-  /** ====== Exportar a CSV ====== */
   const canExport = !!result && (result.totalWords ?? 0) > 0;
 
   const handleExport = () => {
@@ -386,7 +375,6 @@ const handleLogout = async () => {
     const csvLines: string[] = [];
 
     csvLines.push('Sección,Item,Valor');
-
     csvLines.push('Resumen,TotalPalabras,' + result.totalWords);
 
     csvLines.push('TopWords,Palabra,Frecuencia');
@@ -413,33 +401,32 @@ const handleLogout = async () => {
   };
 
   /** ====== Componente gráfico genérico ====== */
-const ChartCard: React.FC<{
-  title: string;
-  data: { name: string; value: number }[];
-  color?: string;
-}> = ({ title, data, color = GREEN.dark }) => (
-  <section className="card">
-    <div className="card__header">{title}</div>
-    <div className="card__body" style={{ height: 300 }}>
-      {data && data.length ? (
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data}>
-            <CartesianGrid stroke={GREEN.grid} strokeDasharray="3 3" />
-            <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={60} />
-            <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="value" fill={color}>
-              <LabelList dataKey="value" position="top" />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="muted">—</div>
-      )}
-    </div>
-  </section>
-);
-
+  const ChartCard: React.FC<{
+    title: string;
+    data: { name: string; value: number }[];
+    color?: string;
+  }> = ({ title, data, color = GREEN.dark }) => (
+    <section className="card">
+      <div className="card__header">{title}</div>
+      <div className="card__body" style={{ height: 300 }}>
+        {data && data.length ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid stroke={GREEN.grid} strokeDasharray="3 3" />
+              <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={60} />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="value" fill={color}>
+                <LabelList dataKey="value" position="top" />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="muted">—</div>
+        )}
+      </div>
+    </section>
+  );
 
   return (
     <div className="dash">
@@ -451,6 +438,7 @@ const ChartCard: React.FC<{
         </div>
         <div className="dash__actions">
           <span className="welcome">Bienvenido: <strong>{displayName}</strong></span>
+
           <button
             className="btn btn--primary"
             onClick={handleExport}
@@ -460,17 +448,16 @@ const ChartCard: React.FC<{
           >
             <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Download/>Exportar</span>
           </button>
+
           <button className="btn btn--green-soft">
             <span style={{display:'inline-flex',gap:8,alignItems:'center'}}><Icon.Refresh/>Actualizar</span>
           </button>
 
           <button className="btn btn--danger" onClick={handleLogout} title="Cerrar sesión">
-           <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>
-            <Icon.Power/> Cerrar sesión
-           </span>
+            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>
+              <Icon.Power/> Cerrar sesión
+            </span>
           </button>
-
-
         </div>
       </header>
 
@@ -478,16 +465,16 @@ const ChartCard: React.FC<{
       <section className="bar">
         {/* Cargar TXT */}
         <div className="file-picker">
-        <button
+          <button
             type="button"
-            className="btn btn--primary"   // <<-- ANTES estaba con estilos inline
+            className="btn btn--primary"
             onClick={() => fileInputRef.current?.click()}
             aria-label="Cargar archivo .txt"
->
+          >
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
-            <Icon.Upload/> Cargar .txt
+              <Icon.Upload/> Cargar .txt
             </span>
-        </button>
+          </button>
 
           <input
             ref={fileInputRef}
@@ -497,6 +484,7 @@ const ChartCard: React.FC<{
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
             hidden
           />
+
           <span className="hint" style={{display:'inline-flex',gap:6,alignItems:'center',color:'#6b7280'}}>
             <Icon.Doc/> Formato: .txt
           </span>
@@ -512,10 +500,7 @@ const ChartCard: React.FC<{
             value={lang}
             onChange={(e) => setLang(e.target.value as LangISO)}
             className="btn"
-            style={{
-              minWidth: 180, background:'#fff', borderColor:'#e5e7eb',
-              fontWeight:600, color:'#1f2937'
-            }}
+            style={{ minWidth: 180, background:'#fff', borderColor:'#e5e7eb', fontWeight:600, color:'#1f2937' }}
           >
             <option value="es">Español (es)</option>
             <option value="en">Inglés (en)</option>
@@ -548,66 +533,62 @@ const ChartCard: React.FC<{
         </div>
       </section>
 
-      {/* Contenido del TXT */}
-      <section className="card">
-        <div className="card__header">Contenido del documento cargado</div>
-        <div className="card__body">
-          <div
-            className="raw-view raw-view--readonly"
-            style={{
-              border: '2.5px solid #dfe7e5',
-              borderRadius: 14,
-              padding: 12,
-              background: '#fff',
-              maxHeight: 420,
-              overflowY: 'auto',
-              boxShadow: 'var(--shadow-sm)'
-            }}
-          >
-            <pre style={{margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', color:'#111827'}}>
-              {rawText || 'Aquí se mostrará el contenido del archivo .txt'}
-            </pre>
+      {/* ✅ Dos columnas principales: Contenido TXT (izq) + Resultados (der) */}
+      <div className="grid-2">
+        {/* Contenido del TXT */}
+        <section className="card">
+          <div className="card__header">Contenido del documento cargado</div>
+          <div className="card__body">
+            <div
+              className="raw-view raw-view--readonly"
+              style={{
+                border: '2.5px solid #dfe7e5',
+                borderRadius: 14,
+                padding: 12,
+                background: '#fff',
+                maxHeight: 420,
+                overflowY: 'auto',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <pre style={{margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', color:'#111827'}}>
+                {rawText || 'Aquí se mostrará el contenido del archivo .txt'}
+              </pre>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Resultados */}
-      <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
-        <div className="card__header">Resultados del análisis léxico</div>
-        <div className="card__body">
-          {errorMsg && <div className="alert">{errorMsg}</div>}
-          {!result ? (
-            <div className="muted">Carga un .txt, elige un idioma y pulsa <strong>Procesar</strong>.</div>
-          ) : (
-            <>
-              <div className="grid-2">
-                <div>
+        {/* Resultados */}
+        <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
+          <div className="card__header">Resultados del análisis léxico</div>
+          <div className="card__body">
+            {errorMsg && <div className="alert">{errorMsg}</div>}
+            {!result ? (
+              <div className="muted">Carga un .txt, elige un idioma y pulsa <strong>Procesar</strong>.</div>
+            ) : (
+              <>
+                {/* Métricas rápidas */}
+                <div className="grid-2">
                   <div className="metric"><span>Total de palabras</span><strong>{result.totalWords}</strong></div>
-                  <div className="metric"><span>Más repetidas</span><div>{topOrEmpty(result.topWords)}</div></div>
-                  <div className="metric"><span>Menos repetidas</span><div>{topOrEmpty(result.rareWords)}</div></div>
-                  <div className="metric"><span>Pronombres personales</span><div>{listOrEmpty(result.pronouns)}</div></div>
+                  <div className="metric"><span>Pronombres distintos</span><strong>{result.pronouns.length}</strong></div>
+                  <div className="metric"><span>Personas distintas</span><strong>{result.persons.length}</strong></div>
+                  <div className="metric"><span>Sustantivos (raíz)</span><strong>{result.nounsLemma.length}</strong></div>
+                  <div className="metric"><span>Verbos (raíz)</span><strong>{result.verbsLemma.length}</strong></div>
+                  <div className="metric"><span>Top únicas</span><strong>{result.topWords.length}</strong></div>
                 </div>
-                <div>
-                  <div className="metric"><span>Nombres de personas</span><div>{listOrEmpty(result.persons)}</div></div>
-                  <div className="metric"><span>Sustantivos (forma raíz)</span><div>{listOrEmpty(result.nounsLemma)}</div></div>
-                  <div className="metric"><span>Verbos (forma raíz)</span><div>{listOrEmpty(result.verbsLemma)}</div></div>
-                  <div className="metric"><span>Otras clasificaciones</span><div>{result.other ? JSON.stringify(result.other) : '—'}</div></div>
+
+                {/* Gráficos */}
+                <div className="charts-grid">
+                  <ChartCard title="Top palabras" data={dataTop} />
+                  <ChartCard title="Palabras raras" data={dataRare} color={GREEN.mid} />
+                  <ChartCard title="Pronombres" data={dataPronouns} color={GREEN.light} />
+                  <ChartCard title="Personas detectadas" data={dataPersons} color={GREEN.dark} />
                 </div>
-              </div>
-
-              {/* Gráficos */}
-              <div className="charts-grid">
-                  <ChartCard title="Palabras más repetidas"    data={dataTop}      color={GREEN.dark} />
-                  <ChartCard title="Palabras menos repetidas"   data={dataRare}     color={GREEN.light} />
-                  <ChartCard title="Pronombres personales (frecuencia)" data={dataPronouns} color={GREEN.mid} />
-                  <ChartCard title="Nombres de personas (frecuencia)"   data={dataPersons}  color={GREEN.dark} />
-                  <ChartCard title="Otras clasificaciones (resumen)"    data={dataOther}    color={GREEN.mid} />
-              </div>
-
-            </>
-          )}
-        </div>
-      </section>
+              </>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   );
 };

@@ -170,6 +170,14 @@
   color:#7c2d12; border-radius:12px; margin-bottom:10px; box-shadow: var(--shadow-sm);
 }
 
+/* Contenedor de charts */
+.dash .charts-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:14px;
+  margin-top:14px;
+}
+
 /* ===== Responsivo ===== */
 @media (max-width: 1200px){
   .dash .bar{ grid-template-columns: 1fr 1fr 170px; }
@@ -179,6 +187,9 @@
   .dash .actions{ position:static; justify-self:stretch; flex-direction:row; }
   .dash .actions .btn{ width:auto; flex:1; }
   .dash .dash__header{ flex-direction: column; align-items: flex-start; gap:8px; }
+  /* ⚠️ Hacemos que las dos columnas principales se apilen también en tablets/chicos */
+  .dash .grid-2{ grid-template-columns: 1fr; }
+  .dash .charts-grid{ grid-template-columns: 1fr; }
 }
 @media (max-width: 720px){
   .dash .grid-2{ grid-template-columns: 1fr; }
@@ -219,18 +230,6 @@
   border-color: #e5e7eb !important;
 }
 
-/* Contenedor de charts */
-.dash .charts-grid{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap:14px;
-  margin-top:14px;
-}
-
-@media (max-width: 992px){
-  .dash .charts-grid{ grid-template-columns: 1fr; }
-}
-
 /* ==== Tema rojo (logout) ==== */
 :root, .dash {
   --danger-700: #b91c1c;
@@ -257,7 +256,6 @@
 .dash h1{
   color: var(--primary-700);
 }
-
 .dash .card__header{
   color: var(--primary-700);
   font-weight: 800;
@@ -270,7 +268,6 @@
   box-shadow: none;
   filter: saturate(.2);
 }
-
 /* Procesar (verde) deshabilitado: gris claro */
 .dash .btn--primary:disabled{
   background: #e5e7eb;    /* gris claro */
@@ -280,7 +277,6 @@
 .dash .btn--primary:disabled:hover{
   background: #e5e7eb;
 }
-
 /* Limpiar (amarillo) deshabilitado: gris claro */
 .dash .btn--warning:disabled{
   background: #e5e7eb;
