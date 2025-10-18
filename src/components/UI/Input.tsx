@@ -11,6 +11,7 @@ interface InputProps {
   disabled?: boolean;
   className?: string;
   name?: string;
+  autoComplete?: string; // ✅ AGREGADO: Soporte para autoComplete
 }
 
 const Input: React.FC<InputProps> = ({
@@ -23,11 +24,12 @@ const Input: React.FC<InputProps> = ({
   required = false,
   disabled = false,
   className = '',
-  name
+  name,
+  autoComplete // ✅ AGREGADO: Destructurar autoComplete
 }) => {
   return (
     <div className={`form-group ${className}`}>
-      {label && <label className="form-label">{label}</label>}
+      {label && <label className="form-label" htmlFor={id}>{label}</label>}
       <input
         id={id}
         type={type}
@@ -38,6 +40,7 @@ const Input: React.FC<InputProps> = ({
         required={required}
         disabled={disabled}
         name={name}
+        autoComplete={autoComplete} // ✅ AGREGADO: Pasar autoComplete al input
       />
     </div>
   );
