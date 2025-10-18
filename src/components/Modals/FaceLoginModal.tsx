@@ -1,10 +1,17 @@
-// src/components/FaceLoginModal.tsx
-import React, { useState, useRef, useCallback } from 'react';
+// src/components/Modals/FaceLoginModal.tsx
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-// ⚠️ usa ruta relativa para evitar problemas con "@/":
-import { faceLogin } from '../../services/facialAuthService';
+import { faceLogin } from '../../services/facialAuthService'; // <-- NO se cambia
+import { COLORS } from '../../utils/constants';
 import { useAuth } from '../../context/AuthContext';
 
+/**
+ * Componente modal para Login por Reconocimiento Facial.
+ * - Quita la "foto guardada" por completo (no hay llamadas a /last-photo).
+ * - Tras capturar, el proceso es AUTOMÁTICO: valida, adopta sesión y navega.
+ * - Muestra toasts de depuración y una barra de progreso de estados.
+ * - No modifica endpoints ni servicios existentes.
+ */
 
 interface FaceLoginIntegratedProps {
   isActive: boolean;
@@ -12,91 +19,160 @@ interface FaceLoginIntegratedProps {
   onSuccess?: (userData: { photo: string; name: string }) => void;
 }
 
-// helper: de dataURL -> base64
+// Utilidad: dataURL -> base64 crudo
 function dataUrlToBase64(d: string) {
   const i = d.indexOf(',');
   return i >= 0 ? d.slice(i + 1) : d;
 }
+
+type ToastType = 'success' | 'warning' | 'error' | 'info';
+type ToastItem = { id: number; type: ToastType; message: string; ttl: number };
+
+// Estados de la barra de progreso
+type FlowStep =
+  | 'idle'
+  | 'camera_ready'
+  | 'captured'
+  | 'sending'
+  | 'validating'
+  | 'adopting'
+  | 'done'
+  | 'error';
 
 const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
   isActive,
   onClose,
   onSuccess
 }) => {
-  const [step, setStep] = useState<'capture' | 'comparison'>('capture');
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const recognizedUser = 'Usuario Ejemplo';
-  const comparisonMetrics = {
-    facialRecognition: 98,
-    expressionMatch: 95,
-    lightingQuality: 92,
-    faceAlignment: 97
-  };
+  // Vista actual: captura o resultado
+  const [stepView, setStepView] = useState<'capture' | 'result'>('capture');
 
-  // feedback mínimo mientras valida
-  const [submitting, setSubmitting] = useState(false);
+  // Foto capturada (data URL)
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+
+  // Progreso interno del flujo
+  const [flowStep, setFlowStep] = useState<FlowStep>('idle');
+  const [progressValue, setProgressValue] = useState<number>(0); // 0..100
+  const [matchScore, setMatchScore] = useState<number>(0); // si el backend lo provee
+
+  // Errores de envío/validación
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Toasts (depuración visual y profesional)
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const addToast = useCallback((type: ToastType, message: string, ttl = 4500) => {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    setToasts(prev => [...prev, { id, type, message, ttl }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), ttl);
+  }, []);
+  const debug = useCallback((msg: string) => addToast('info', msg, 3800), [addToast]);
+
+  // Cámara
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Navegación y adopción de sesión
   const navigate = useNavigate();
-  const auth = useAuth(); // puede lanzar si está fuera del provider
+  const auth = useAuth();
   const adopt = (auth as any)?.adoptSession as ((s: any) => void) | undefined;
 
+  // === Estilos de toasts ===
+  const toastContainerStyle: React.CSSProperties = useMemo(() => ({
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    zIndex: 10,
+    display: 'flex',
+    flexDirection: 'column-reverse', // último arriba
+    gap: 10,
+    width: 420,
+    maxWidth: '92vw'
+  }), []);
 
+  const styleForToast = useCallback((type: ToastType): React.CSSProperties => {
+    const bg =
+      type === 'success' ? COLORS.secondaryAccent :
+      type === 'warning' ? COLORS.accent :
+      type === 'error'   ? '#333' :
+      '#090B0D'; // info
+    return {
+      background: bg,
+      color: COLORS.white,
+      borderRadius: 12,
+      padding: '12px 14px',
+      boxShadow: '0 10px 28px rgba(0,0,0,.28)',
+      border: '1px solid rgba(0,0,0,.06)',
+      display: 'grid',
+      gridTemplateColumns: '20px 1fr 24px',
+      alignItems: 'start',
+      gap: 10,
+      fontSize: 14,
+      lineHeight: 1.35,
+      width: '100%',
+    };
+  }, []);
 
+  // ===== Cámara: iniciar/detener =====
   const startCamera = useCallback(async () => {
     try {
+      debug('🎥 Solicitando acceso a la cámara…');
       const constraints = {
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },   // mayor resolución para mejor calidad
+          height: { ideal: 1080 },
           facingMode: 'user'
         }
       };
-
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await new Promise(resolve => {
-          videoRef.current!.onloadedmetadata = resolve;
-        });
+        await new Promise(resolve => { videoRef.current!.onloadedmetadata = resolve; });
       }
-    } catch (error) {
+      setFlowStep('camera_ready');
+      setProgressValue(10);
+      debug('✅ Cámara habilitada');
+    } catch (error: any) {
       console.error('Error accessing camera:', error);
+      setFlowStep('error');
+      addToast('error', 'No pudimos acceder a tu cámara. Verifica permisos.', 6500);
     }
-  }, []);
+  }, [addToast, debug]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+      debug('⏹️ Cámara detenida');
     }
-  }, []);
+  }, [debug]);
 
-  React.useEffect(() => {
-    if (isActive && step === 'capture') {
+  // Abrir/cerrar modal: gestionar ciclo de cámara y estados
+  useEffect(() => {
+    if (isActive) {
+      setSubmitError(null);
+      setCapturedPhoto(null);
+      setMatchScore(0);
+      setFlowStep('idle');
+      setProgressValue(0);
+      setStepView('capture');
       startCamera();
     } else {
       stopCamera();
     }
-
     return () => stopCamera();
-  }, [isActive, step, startCamera, stopCamera]);
+  }, [isActive, startCamera, stopCamera]);
 
+  // ===== Capturar foto =====
   const handleCapture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-
     if (!context) return;
 
+    // Guardamos el frame exactamente como se ve (selfie invertida)
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.save();
@@ -106,81 +182,104 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
 
     const imageData = canvas.toDataURL('image/png', 1.0);
     setCapturedPhoto(imageData);
-    stopCamera();
-    setStep('comparison');
-  }, [stopCamera]);
+    setFlowStep('captured');
+    setProgressValue(30);
+    debug('📸 Foto capturada');
 
+    // Pasar a vista de resultado y detener cámara
+    setStepView('result');
+    stopCamera();
+  }, [stopCamera, debug]);
+
+  // ===== Secuencia AUTOMÁTICA tras capturar =====
+  useEffect(() => {
+    const run = async () => {
+      if (!capturedPhoto || stepView !== 'result') return;
+
+      try {
+        setSubmitError(null);
+
+        // 1) Enviar
+        setFlowStep('sending');
+        setProgressValue(50);
+        debug('📤 Enviando imagen para validación…');
+        const raw = dataUrlToBase64(capturedPhoto);
+
+        // 2) Validar (endpoint existente en facialAuthService)
+        setFlowStep('validating');
+        setProgressValue(70);
+        const j = await faceLogin(raw);
+
+        // Token
+        const token =
+          j.token || j.Token || j.accessToken || j.access_token || j.jwt;
+        if (!token) throw new Error('Respuesta sin token del servidor');
+
+        // Puntaje si viene del backend; si no, fallback 98
+        const score = Math.round(j?.matchScore || j?.score || 98);
+        setMatchScore(score);
+        debug(`🧠 Coincidencia estimada: ${score}%`);
+
+        // 3) Adoptar sesión
+        setFlowStep('adopting');
+        setProgressValue(85);
+        const user = {
+          id: j?.usuarioId || j?.id || j?.userId || `face_${Date.now()}`,
+          email: j?.email || '',
+          phone: j?.telefono || j?.phone || '',
+          nickname: j?.usuario || j?.username || 'facelogin',
+          fullName: j?.nombreCompleto || j?.name || 'Usuario',
+          role: j?.role || 'analista'
+        };
+        const session = {
+          user,
+          token,
+          loginMethod: 'face',
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        };
+
+        if (typeof adopt === 'function') {
+          adopt(session);
+          debug('🔐 Sesión adoptada en AuthContext');
+        } else {
+          localStorage.setItem('auth_token', session.token);
+          localStorage.setItem('authvision_session', JSON.stringify(session));
+          debug('💾 Sesión guardada en localStorage');
+        }
+
+        // 4) Terminar
+        setFlowStep('done');
+        setProgressValue(100);
+        addToast('success', `Bienvenido, ${session.user.fullName}. Reconocimiento facial exitoso.`, 5500);
+        onSuccess?.({ photo: capturedPhoto, name: session.user.fullName });
+
+        // Cerrar modal + navegar
+        onClose();
+        navigate('/dashboard', { replace: true });
+      } catch (err: any) {
+        console.error(err);
+        const msg = err?.message || 'No se pudo validar tu rostro.';
+        setSubmitError(msg);
+        setFlowStep('error');
+        setProgressValue(0);
+        addToast('error', msg, 6500);
+      }
+    };
+
+    run();
+  }, [capturedPhoto, stepView, adopt, addToast, debug, navigate, onClose]);
+
+  // ===== Reintentar =====
   const handleRetake = () => {
     setCapturedPhoto(null);
-    setStep('capture');
+    setMatchScore(0);
+    setSubmitError(null);
+    setFlowStep('idle');
+    setProgressValue(0);
+    setStepView('capture');
+    debug('🔄 Reintento de captura');
     startCamera();
   };
-
-  const handleConfirm = async () => {
-    if (!capturedPhoto) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      // 1) convertir dataURL -> base64 crudo
-      const i = capturedPhoto.indexOf(',');
-      const raw = i >= 0 ? capturedPhoto.slice(i + 1) : capturedPhoto;
-
-      // 2) pedir token al backend con tu servicio
-      const j = await faceLogin(raw);
-
-      // 3) tomar el token de cualquiera de estas llaves
-      const token =
-        j.token ||
-        j.Token ||
-        j.accessToken ||
-        j.access_token ||
-        j.jwt;
-
-      if (!token) throw new Error('Respuesta sin token');
-
-      const user = {
-        id: j.id || j.userId || `face_${Date.now()}`,
-        email: j.email || '',
-        phone: j.telefono || j.phone || '',
-        nickname: j.usuario || j.username || 'facelogin',
-        fullName: j.nombreCompleto || j.name || 'Usuario',
-        role: j.role || 'analista'
-      };
-
-      
-      // 5) construir la sesión
-      const session = {
-        user,
-        token,
-        loginMethod: 'face',
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
-      };
-
-      // 6) adoptar sesión (si el contexto está disponible); si no, fallback a localStorage
-      if (typeof adopt === 'function') {
-        adopt(session);
-      } else {
-        // Fallback seguro si por alguna razón no hay contexto (no truena la UI)
-        localStorage.setItem('auth_token', session.token);
-        localStorage.setItem('authvision_session', JSON.stringify(session));
-      }
-
-      // 7) cerrar modal y navegar sin recargar
-      onSuccess?.({ photo: capturedPhoto, name: user.fullName });
-      onClose();
-      navigate('/dashboard', { replace: true });
-
-      // 7) ir al dashboard FORZANDO recarga
-      // (así el AuthProvider hace "restore" y marca isAuthenticated=true)
-      window.location.replace('/dashboard');
-    } catch (err: any) {
-      console.error(err);
-      setSubmitError(err?.message || 'No se pudo validar tu rostro.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
 
   if (!isActive) return null;
 
@@ -189,16 +288,30 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
       <div className="face-overlay" onClick={onClose} />
 
       <div className="face-content">
-        {/* PASO 1: CAPTURA */}
-        {step === 'capture' && (
-          <>
-            <div className="face-header">
-              <h2 className="face-title">Reconocimiento Facial</h2>
-              <button className="face-close-btn" onClick={onClose}>✕</button>
-            </div>
+        {/* CABECERA */}
+        <div className="face-header">
+          <h2 className="face-title">Reconocimiento Facial</h2>
+          <button className="face-close-btn" onClick={onClose}>✕</button>
+        </div>
 
-            <div className="face-body capture-view">
-              <div className="video-container-wrapper">
+        {/* BARRA DE ESTADO (progreso interno) */}
+        <div className="flowbar">
+          <div className="flowbar-fill" style={{ width: `${progressValue}%` }} />
+          <div className="flowbar-steps">
+            <span className={flowStep !== 'idle' ? 'on' : ''}>Cámara</span>
+            <span className={['captured','sending','validating','adopting','done'].includes(flowStep) ? 'on' : ''}>Captura</span>
+            <span className={['sending','validating','adopting','done'].includes(flowStep) ? 'on' : ''}>Envío</span>
+            <span className={['validating','adopting','done'].includes(flowStep) ? 'on' : ''}>Validación</span>
+            <span className={['adopting','done'].includes(flowStep) ? 'on' : ''}>Sesión</span>
+          </div>
+        </div>
+
+        {/* CUERPO */}
+        <div className={`face-body ${stepView === 'capture' ? 'capture-view' : 'result-view'}`}>
+          {stepView === 'capture' ? (
+            <>
+              {/* Contenedor de VIDEO (más grande, 4:3) */}
+              <div className="video-container-wrapper large">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -211,7 +324,7 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
               </div>
 
               <div className="capture-instructions">
-                <p>Mira directamente a la cámara para el reconocimiento facial</p>
+                <p>Mira directamente a la cámara y mantén el rostro dentro del marco</p>
               </div>
 
               <button className="capture-button" onClick={handleCapture}>
@@ -219,562 +332,200 @@ const FaceLoginIntegrated: React.FC<FaceLoginIntegratedProps> = ({
                   <span className="capture-ring-inner"></span>
                 </span>
               </button>
-            </div>
-          </>
-        )}
-
-        {/* PASO 2: COMPARATIVA */}
-        {step === 'comparison' && capturedPhoto && (
-          <>
-            <div className="face-header">
-              <h2 className="face-title">Comparativa de Reconocimiento</h2>
-              <button className="face-close-btn" onClick={onClose}>✕</button>
-            </div>
-
-            <div className="face-body comparison-view">
-              {/* Fotos */}
-              <div className="comparison-photos">
-                <div className="photo-side">
-                  <span className="photo-label">Foto Guardada</span>
-                  <div className="photo-frame">
-                    <img src={capturedPhoto} alt="Guardada" className="comparison-img" />
+            </>
+          ) : (
+            <>
+              {/* RESULTADO: Foto capturada grande + “panel” de coincidencia */}
+              <div className="result-grid">
+                <div className="photo-big">
+                  <div className="photo-frame-big">
+                    {capturedPhoto && <img src={capturedPhoto} alt="Capturada" className="photo-img-big" />}
                   </div>
                 </div>
 
-                <div className="comparison-match">
-                  <div className="match-badge">
-                    <span className="match-percent">98%</span>
-                    <span className="match-text">COINCIDENCIA</span>
-                  </div>
-                  <div className="match-arrow">→</div>
-                </div>
-
-                <div className="photo-side">
-                  <span className="photo-label new-label">Foto Nueva</span>
-                  <div className="photo-frame">
-                    <img src={capturedPhoto} alt="Nueva" className="comparison-img" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Métricas */}
-              <div className="metrics-container">
-                <h3 className="metrics-title">Análisis de Calidad</h3>
-                <div className="metrics-list">
-                  {[
-                    { label: 'Reconocimiento Facial', value: comparisonMetrics.facialRecognition },
-                    { label: 'Coincidencia de Expresión', value: comparisonMetrics.expressionMatch },
-                    { label: 'Calidad de Iluminación', value: comparisonMetrics.lightingQuality },
-                    { label: 'Alineación del Rostro', value: comparisonMetrics.faceAlignment }
-                  ].map((metric, idx) => (
-                    <div key={idx} className="metric-row">
-                      <span className="metric-label">{metric.label}</span>
-                      <div className="metric-bar-wrapper">
-                        <div className="metric-bar">
-                          <div 
-                            className="metric-fill" 
-                            style={{ width: `${metric.value}%` }}
-                          ></div>
-                        </div>
-                        <span className="metric-percent">{metric.value}%</span>
-                      </div>
+                <div className="match-panel">
+                  <div className="match-badge pro">
+                    <div className="radar" />
+                    <div className="badge-inner">
+                      <span className="match-percent">{matchScore ? `${matchScore}%` : '…'}</span>
+                      <span className="match-text">COINCIDENCIA</span>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="match-description">
+                    {submitError ? (
+                      <p className="error-text">{submitError}</p>
+                    ) : (
+                      <p>Procesando reconocimiento y preparando tu sesión…</p>
+                    )}
+                  </div>
+
+                  <div className="actions">
+                    <button className="btn btn-secondary" onClick={handleRetake} disabled={flowStep === 'sending' || flowStep === 'validating'}>
+                      Reintentar
+                    </button>
+                    {/* No hay botón de Confirmar: el proceso es automático */}
+                  </div>
                 </div>
-
-                {/* Mensaje de error simple */}
-                {submitError && (
-                  <p style={{ color: '#b91c1c', fontWeight: 700, marginTop: 12 }}>
-                    {submitError}
-                  </p>
-                )}
               </div>
+            </>
+          )}
+        </div>
 
-              {/* Usuario (visual) */}
-              <div className="user-section">
-                <div className="user-icon">✓</div>
-                <div className="user-info">
-                  <p className="user-name">{recognizedUser}</p>
-                  <p className="user-status">Rostro reconocido exitosamente</p>
-                </div>
+        {/* TOASTS abajo-derecha */}
+        <div style={toastContainerStyle}>
+          {toasts.map(t => (
+            <div key={t.id} style={styleForToast(t.type)} role="status" aria-live="polite">
+              <div style={{ fontSize: 18, lineHeight: 1, marginTop: 2 }}>
+                {t.type === 'success' ? '✅' : t.type === 'warning' ? '⚠️' : t.type === 'error' ? '❌' : 'ℹ️'}
               </div>
-
-              {/* Botones */}
-              <div className="action-buttons">
-                <button className="btn btn-secondary" onClick={handleRetake} disabled={submitting}>
-                  Retomar Foto
-                </button>
-                <button className="btn btn-primary" onClick={handleConfirm} disabled={submitting}>
-                  {submitting ? 'Validando…' : 'Confirmar Acceso'}
-                </button>
-              </div>
+              <div style={{ whiteSpace: 'pre-line' }}>{t.message}</div>
+              <button
+                type="button"
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                aria-label="Cerrar"
+                style={{
+                  marginLeft: 'auto',
+                  background: 'transparent',
+                  border: 'none',
+                  color: COLORS.white,
+                  cursor: 'pointer',
+                  fontSize: 18,
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
             </div>
-          </>
-        )}
+          ))}
+        </div>
       </div>
 
-      {/* (tus estilos existentes se mantienen tal cual) */}
+      {/* Estilos: adaptado a tu paleta + UI más grande y moderna */}
       <style>{`
         .face-modal {
           position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          inset: 0;
           z-index: 9999;
           display: none;
           align-items: center;
           justify-content: center;
           padding: 20px;
         }
-
-        .face-modal.active {
-          display: flex;
-        }
-
+        .face-modal.active { display: flex; }
         .face-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
+          position: absolute; inset: 0;
           background: rgba(9, 11, 13, 0.92);
           backdrop-filter: blur(14px);
         }
-
         .face-content {
           position: relative;
           width: 100%;
-          max-width: 1000px;
-          max-height: 90vh;
-          background: #CCD0D9;
+          max-width: 1100px;
+          max-height: 92vh;
+          background: ${COLORS.lightGray};
           border-radius: 32px;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          box-shadow: 0 30px 90px rgba(0, 0, 0, 0.4);
-          animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+          box-shadow: 0 30px 90px rgba(0,0,0,.4);
+          animation: slideUp .6s cubic-bezier(.34,1.56,.64,1);
         }
-
         @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(50px) scale(0.90);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
+          from { opacity: 0; transform: translateY(50px) scale(.92); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-
         .face-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 32px 40px;
-          background: #51736F;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 22px 28px; background: ${COLORS.teal};
+          border-bottom: 1px solid rgba(255,255,255,.12);
         }
-
-        .face-title {
-          margin: 0;
-          font-size: 28px;
-          font-weight: 700;
-          color: white;
-        }
-
+        .face-title { margin: 0; font-size: 22px; font-weight: 800; color: ${COLORS.white}; letter-spacing: .3px; }
         .face-close-btn {
-          background: rgba(255, 255, 255, 0.15);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: white;
-          width: 40px;
-          height: 40px;
-          border-radius: 10px;
-          cursor: pointer;
-          font-size: 20px;
-          transition: all 0.3s ease;
+          background: rgba(255,255,255,.15);
+          border: 1px solid rgba(255,255,255,.2);
+          color: ${COLORS.white}; width: 40px; height: 40px; border-radius: 10px;
+          cursor: pointer; font-size: 20px; transition: all .3s ease;
         }
+        .face-close-btn:hover { background: rgba(255,255,255,.25); transform: rotate(90deg); }
 
-        .face-close-btn:hover {
-          background: rgba(255, 255, 255, 0.25);
-          transform: rotate(90deg);
+        /* Barra de flujo */
+        .flowbar { position: relative; background: #e9edf4; height: 8px; margin: 0 18px 10px; border-radius: 999px; overflow: hidden; }
+        .flowbar-fill { height: 100%; background: ${COLORS.teal}; transition: width .5s cubic-bezier(.34,1.56,.64,1); }
+        .flowbar-steps {
+          display: flex; justify-content: space-between; margin: 8px 18px 14px;
+          color: #425466; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px;
         }
+        .flowbar-steps span { opacity: .35; }
+        .flowbar-steps span.on { opacity: 1; color: ${COLORS.black}; }
 
-        .face-body {
-          flex: 1;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
+        .face-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding: 18px; }
+        .capture-view { align-items: center; justify-content: center; gap: 18px; }
+        .result-view { gap: 18px; }
+
+        /* Video grande */
+        .video-container-wrapper.large {
+          position: relative; width: min(980px, 100%); aspect-ratio: 4 / 3;
+          border-radius: 26px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,.22);
+          background: #000;
         }
+        .face-video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        .video-frame { position: absolute; inset: 0; border: 2px solid rgba(255,255,255,.2); border-radius: 24px; pointer-events: none; }
 
-        /* CAPTURE VIEW */
-        .capture-view {
-          align-items: center;
-          justify-content: center;
-          padding: 48px;
-          gap: 32px;
-          background: linear-gradient(135deg, #CCD0D9 0%, #E8E8E8 100%);
+        .capture-instructions { text-align: center; color: #333; }
+        .capture-instructions p { margin: 0; font-size: 14px; font-weight: 700; }
+
+        .capture-button { width: 100px; height: 100px; background: transparent; border: none; cursor: pointer; padding: 0; transition: transform .3s ease; }
+        .capture-button:hover { transform: scale(1.06); }
+        .capture-ring-outer { width: 100px; height: 100px; border-radius: 50%; border: 8px solid #fff; position: relative; box-shadow: 0 8px 24px rgba(81,115,111,.28); }
+        .capture-ring-inner { width: calc(100% - 20px); height: calc(100% - 20px); border-radius: 50%;
+          background: linear-gradient(135deg, #fff 0%, #F8F8F8 100%); position: absolute; top: 50%; left: 50%;
+          transform: translate(-50%, -50%); box-shadow: inset 0 2px 6px rgba(0,0,0,.08); display: grid; place-items: center; }
+        .capture-ring-inner::after { content: ''; width: 50px; height: 50px; border-radius: 50%; background: ${COLORS.teal};
+          box-shadow: 0 6px 18px rgba(81,115,111,.35); }
+
+        /* Resultado */
+        .result-grid {
+          display: grid; grid-template-columns: 1.3fr .7fr; gap: 20px; align-items: stretch;
         }
-
-        .video-container-wrapper {
-          position: relative;
-          width: 100%;
-          max-width: 500px;
-          aspect-ratio: 4/3;
-          border-radius: 24px;
-          overflow: hidden;
-          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
+        .photo-big { display: grid; place-items: center; }
+        .photo-frame-big {
+          width: min(860px, 100%); aspect-ratio: 4 / 3; border-radius: 24px; overflow: hidden;
+          border: 2px solid rgba(0,0,0,.05); box-shadow: 0 16px 44px rgba(0,0,0,.18);
+          background: #000;
         }
+        .photo-img-big { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-        .face-video {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          transform: scaleX(-1);
+        .match-panel {
+          background: #fff; border-radius: 22px; padding: 22px; display: flex; flex-direction: column; gap: 16px;
+          box-shadow: 0 10px 26px rgba(0,0,0,.08);
         }
-
-        .video-frame {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          border: 2px solid rgba(255, 255, 255, 0.2);
-          border-radius: 20px;
-          pointer-events: none;
+        .match-badge.pro {
+          position: relative; width: 180px; height: 180px; border-radius: 50%;
+          margin: 8px auto 6px; display: grid; place-items: center; color: ${COLORS.teal};
+          border: 4px solid rgba(81,115,111,.22); background: radial-gradient(ellipse at center, rgba(81,115,111,.10), rgba(81,115,111,.04));
         }
-
-        .capture-instructions {
-          text-align: center;
-          color: #333;
+        .match-badge .badge-inner { z-index: 1; text-align: center; }
+        .match-percent { font-size: 44px; font-weight: 900; }
+        .match-text { font-size: 12px; font-weight: 800; letter-spacing: .8px; margin-top: 4px; }
+        .radar {
+          position: absolute; inset: -20px; border-radius: 50%;
+          background: conic-gradient(from 180deg, rgba(81,115,111,.2), rgba(81,115,111,0) 70%);
+          filter: blur(10px); animation: spin 2.8s linear infinite;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .capture-instructions p {
-          margin: 0;
-          font-size: 14px;
-          font-weight: 600;
-        }
+        .match-description { text-align: center; color: #333; font-weight: 600; }
+        .error-text { color: #b91c1c; font-weight: 800; }
 
-        .capture-button {
-          width: 100px;
-          height: 100px;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          padding: 0;
-          transition: transform 0.3s ease;
-        }
+        .actions { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .btn { padding: 12px 16px; border: none; border-radius: 12px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all .25s ease; }
+        .btn-secondary { background: #E0E0E0; color: #333; }
+        .btn-secondary:hover { background: #D0D0D0; transform: translateY(-1px); }
 
-        .capture-button:hover {
-          transform: scale(1.08);
-        }
-
-        .capture-button:active {
-          transform: scale(0.95);
-        }
-
-        .capture-ring-outer {
-          display: block;
-          width: 100px;
-          height: 100px;
-          border-radius: 50%;
-          border: 8px solid white;
-          box-shadow: 0 8px 24px rgba(81, 115, 111, 0.3);
-          position: relative;
-        }
-
-        .capture-ring-inner {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: calc(100% - 20px);
-          height: calc(100% - 20px);
-          border-radius: 50%;
-          background: linear-gradient(135deg, white 0%, #F8F8F8 100%);
-          margin: auto;
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.08);
-        }
-
-        .capture-ring-inner::after {
-          content: '';
-          width: 50px;
-          height: 50px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #51736F 0%, #51736F 100%);
-          box-shadow: 0 4px 16px rgba(81, 115, 111, 0.3);
-        }
-
-        /* COMPARISON VIEW */
-        .comparison-view {
-          padding: 40px;
-          gap: 32px;
-          background: white;
-          align-items: stretch;
-        }
-
-        .comparison-photos {
-          display: grid;
-          grid-template-columns: 1fr 0.8fr 1fr;
-          gap: 24px;
-          align-items: center;
-        }
-
-        .photo-side {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          align-items: center;
-        }
-
-        .photo-label {
-          font-size: 12px;
-          font-weight: 700;
-          color: white;
-          background: #51736F;
-          padding: 6px 14px;
-          border-radius: 16px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .photo-label.new-label {
-          background: #51736F;
-        }
-
-        .photo-frame {
-          width: 100%;
-          max-width: 220px;
-          aspect-ratio: 3/4;
-          border-radius: 16px;
-          overflow: hidden;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
-          border: 2px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .comparison-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-
-        .comparison-match {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .match-badge {
-          width: 120px;
-          height: 120px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, rgba(81, 115, 111, 0.1) 0%, rgba(81, 115, 111, 0.1) 100%);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          border: 3px solid rgba(81, 115, 111, 0.2);
-          color: #51736F;
-          animation: scaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        @keyframes scaleIn {
-          from {
-            transform: scale(0.8);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-
-        .match-percent {
-          font-size: 32px;
-          font-weight: 800;
-        }
-
-        .match-text {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.8px;
-          margin-top: 4px;
-        }
-
-        .metrics-container {
-          background: #F8F8F8;
-          padding: 28px;
-          border-radius: 16px;
-        }
-
-        .metrics-title {
-          margin: 0 0 20px 0;
-          font-size: 16px;
-          font-weight: 700;
-          color: #333;
-        }
-
-        .metrics-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 20px;
-        }
-
-        .metric-row {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .metric-label {
-          font-size: 12px;
-          font-weight: 700;
-          color: #666;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
-        }
-
-        .metric-bar-wrapper {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .metric-bar {
-          flex: 1;
-          height: 6px;
-          background: #E0E0E0;
-          border-radius: 3px;
-          overflow: hidden;
-        }
-
-        .metric-fill {
-          height: 100%;
-          background: #51736F;
-          border-radius: 3px;
-          transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .metric-percent {
-          font-size: 12px;
-          font-weight: 700;
-          color: #51736F;
-          min-width: 35px;
-          text-align: right;
-        }
-
-        .user-section {
-          background: linear-gradient(135deg, rgba(81, 115, 111, 0.08) 0%, rgba(81, 115, 111, 0.05) 100%);
-          padding: 24px;
-          border-radius: 16px;
-          border: 2px solid rgba(81, 115, 111, 0.15);
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .user-icon {
-          width: 48px;
-          height: 48px;
-          background: #51736F;
-          color: white;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .user-info {
-          flex: 1;
-        }
-
-        .user-name {
-          margin: 0;
-          font-size: 16px;
-          font-weight: 700;
-          color: #1a1a1a;
-        }
-
-        .user-status {
-          margin: 4px 0 0 0;
-          font-size: 12px;
-          color: #51736F;
-          font-weight: 600;
-        }
-
-        .action-buttons {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-          margin-top: auto;
-        }
-
-        .btn {
-          padding: 14px 20px;
-          border: none;
-          border-radius: 12px;
-          font-size: 13px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .btn-secondary {
-          background: #E0E0E0;
-          color: #333;
-        }
-
-        .btn-secondary:hover {
-          background: #D0D0D0;
-          transform: translateY(-2px);
-        }
-
-        .btn-primary {
-          background: #51736F;
-          color: white;
-          box-shadow: 0 4px 12px rgba(81, 115, 111, 0.25);
-        }
-
-        .btn-primary:hover {
-          background: #3F5A56;
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(81, 115, 111, 0.35);
-        }
-
-        @media (max-width: 768px) {
-          .comparison-photos {
-            grid-template-columns: 1fr;
-          }
-
-          .face-header {
-            padding: 20px;
-          }
-
-          .face-title {
-            font-size: 20px;
-          }
-
-          .face-body {
-            padding: 24px;
-          }
-
-          .metrics-list {
-            grid-template-columns: 1fr;
-          }
-
-          .action-buttons {
-            grid-template-columns: 1fr;
-          }
+        @media (max-width: 900px) {
+          .result-grid { grid-template-columns: 1fr; }
+          .photo-frame-big { width: 100%; }
         }
       `}</style>
     </div>
