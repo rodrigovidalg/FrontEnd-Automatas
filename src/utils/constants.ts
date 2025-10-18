@@ -26,7 +26,10 @@ export const API_ROUTES = {
    // === Facial ===
   FACIAL_SEGMENT: '/api/FacialAuth/segment',
   FACIAL_SAVE: '/api/FacialAuth/save',
-  FACIAL_LOGIN: '/api/FacialAuth/login'// reemplaza el viejo FACE_LOGIN
+  FACIAL_LOGIN: '/api/FacialAuth/login',// reemplaza el viejo FACE_LOGIN
+
+  // === NUEVO (ya existe en tu backend): reintento de envío del PDF/QR ===
+  SEND_CARD_NOW: '/api/Auth/send-card-now'
 } as const;
 
 export const FILTERS: FilterOption[] = [
