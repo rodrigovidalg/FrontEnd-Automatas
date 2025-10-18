@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
-// Si no usas alias "@", cambia estos imports a rutas relativas:
+// Rutas relativas:
 import { api } from '../../services/api';
 import { saveFaceToDB } from '../../services/facialAuthService';
 import { API_ROUTES, COLORS } from '../../utils/constants';
@@ -40,12 +40,11 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
   const [statusDescription, setStatusDescription] = useState('');
   const [statusProgress, setStatusProgress] = useState(0);
 
-  // --- Toast state (inline, sin crear archivo nuevo) ---
+  // Toast
   const [toastOpen, setToastOpen] = useState(false);
   const [toastType, setToastType] = useState<ToastType>('success');
   const [toastMessage, setToastMessage] = useState('');
 
-  // estilos del toast en línea (adaptado a tu paleta) — lo movemos al dock inferior
   const toastStyles = useMemo<React.CSSProperties>(() => {
     const base: React.CSSProperties = {
       width: '100%',
@@ -137,21 +136,16 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!validateForm()) return;
 
     try {
+      // === Arrancamos rápido, sin sleeps artificiales ===
       setShowStatus(true);
-      setStatusTitle('Validando');
-      setStatusDescription('Verificando datos...');
-      setStatusProgress(20);
-      await new Promise(r => setTimeout(r, 400));
-
       setStatusTitle('Registrando');
-      setStatusDescription('Creando cuenta en el servidor...');
-      setStatusProgress(40);
+      setStatusDescription('Creando cuenta…');
+      setStatusProgress(35);
 
-      // 1) Registro (el backend dispara el PDF/QR después del commit)
+      // 1) Registro — ahora el backend no bloquea por envío de correo
       const payloadRegister = {
         usuario: formData.nickname,
         email: formData.email,
@@ -162,8 +156,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       await api(API_ROUTES.REGISTER, { method: 'POST', json: payloadRegister });
 
       setStatusTitle('Autenticando');
-      setStatusDescription('Generando sesión...');
-      setStatusProgress(60);
+      setStatusDescription('Generando sesión…');
+      setStatusProgress(55);
 
       // 2) Login para token
       const loginRes = await api(API_ROUTES.LOGIN, {
@@ -174,8 +168,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       if (token) localStorage.setItem('token', token);
 
       setStatusTitle('Sincronizando');
-      setStatusDescription('Consultando tu perfil...');
-      setStatusProgress(75);
+      setStatusDescription('Obteniendo tu perfil…');
+      setStatusProgress(70);
 
       // 3) /me para userId
       const me = await api('/api/Auth/me', { auth: true });
@@ -183,43 +177,42 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         me.id || me.userId || me.usuarioId || me.sub || (me.user && me.user.id);
       if (!userId) throw new Error('No se pudo obtener userId');
 
-      setStatusTitle('Guardando biometría');
-      setStatusDescription('Asociando tu rostro a la cuenta...');
-      setStatusProgress(85);
-
-      // 4) Si hay rostro parcial => guardar en DB
-      const pending = localStorage.getItem('pendingFaceB64');
-      if (pending) {
-        await saveFaceToDB(String(userId), pending);
-        localStorage.removeItem('pendingFaceB64');
-      }
-
-      // 5) Confirmar/forzar envío del PDF con reintento controlado
-      setStatusTitle('Enviando credenciales');
-      setStatusDescription('Generando y enviando tu PDF con QR al correo…');
-      setStatusProgress(95);
-
-      try {
-        await api(API_ROUTES.SEND_CARD_NOW, {
-          method: 'POST',
-          // Si luego pones [Authorize] en el endpoint, añade: auth: true
-          json: { usuarioId: Number(userId) }
-        });
-        showToast('success', `¡Listo! Enviamos tu carnet a ${formData.email}.`);
-      } catch (sendErr: any) {
-        console.warn('[SEND_CARD_NOW] WARN:', sendErr?.message || sendErr);
-        showToast(
-          'warning',
-          'Tu cuenta se creó con éxito. No pudimos confirmar el envío automático del correo.\n' +
-          'Revisa tu bandeja de entrada/spam o intenta reenviarlo desde tu perfil.'
-        );
-      }
-
+      // === MOSTRAR ÉXITO ANTES DE TAREAS NO CRÍTICAS ===
       setStatusTitle('Completado');
-      setStatusDescription('Registro exitoso ✅ Revisa tu correo.');
+      setStatusDescription('Registro exitoso ✅');
       setStatusProgress(100);
 
-      // Reset suave
+      // 4) TAREAS NO CRÍTICAS EN PARALELO (no bloquean la UX)
+      const pending = localStorage.getItem('pendingFaceB64');
+      if (pending) {
+        // Guardado de rostro en background
+        (async () => {
+          try {
+            await saveFaceToDB(String(userId), pending);
+            localStorage.removeItem('pendingFaceB64');
+            showToast('success', 'Biometría asociada a tu cuenta ✅');
+          } catch (e: any) {
+            console.warn('[saveFaceToDB] WARN:', e?.message || e);
+            showToast('warning', 'Tu cuenta está lista, pero no pudimos asociar la biometría automáticamente.');
+          }
+        })();
+      }
+
+      // Envío del PDF/QR en background (el backend ya lo dispara en bg, esto solo lo refuerza)
+      (async () => {
+        try {
+          await api(API_ROUTES.SEND_CARD_NOW, {
+            method: 'POST',
+            json: { usuarioId: Number(userId) }
+          });
+          showToast('success', `Tu carnet con QR fue enviado a ${formData.email}.`);
+        } catch (sendErr: any) {
+          console.warn('[SEND_CARD_NOW] WARN:', sendErr?.message || sendErr);
+          showToast('warning', 'Tu cuenta está lista. No pudimos confirmar el correo automáticamente. Revisa spam o reenviar desde tu perfil.');
+        }
+      })();
+
+      // Reset rápido
       setTimeout(() => {
         setShowStatus(false);
         setFormData({
@@ -232,19 +225,19 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
           notifications: 'email'
         });
         setRecaptchaVerified(false);
-      }, 800);
+      }, 400);
     } catch (err: any) {
       console.error(err);
       setStatusTitle('Error');
       const msg =
-        err?.message?.includes('HTTP 500') ? 'El servidor encontró un problema al registrar. Inténtalo nuevamente.' :
+        err?.message?.includes('HTTP 500') ? 'El servidor encontró un problema al registrar.' :
         err?.message?.includes('NetworkError') ? 'No pudimos comunicarnos con el servidor. Verifica tu conexión.' :
-        err?.message || 'Ocurrió un error inesperado. Inténtalo más tarde.';
+        err?.message || 'Ocurrió un error inesperado.';
       setStatusDescription(msg);
       setStatusProgress(0);
       setFormError(msg);
       showToast('error', `No se pudo completar el registro.\nDetalle: ${msg}`);
-      setTimeout(() => setShowStatus(false), 2000);
+      setTimeout(() => setShowStatus(false), 1500);
     }
   };
 
@@ -340,27 +333,23 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         label="Teléfono"
       />
 
-      {/* === ORDEN NUEVO AL FINAL === */}
-      {/* 1) Botón "Registrarse con Foto" */}
+      {/* === Orden final solicitado === */}
       <div className="register-buttons" style={{ display: 'flex', gap: 12, marginTop: 10, marginBottom: 6 }}>
         <Button type="button" variant="advanced" onClick={onCameraCapture}>
           📸 Registrarse con Foto
         </Button>
       </div>
 
-      {/* 2) reCAPTCHA */}
       <div style={{ margin: '6px 0 10px' }}>
         <Recaptcha onVerified={handleRecaptchaVerified} value={recaptchaVerified} />
       </div>
 
-      {/* 3) Botón "Registrarse Ahora" (al final) */}
       <div className="register-buttons" style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="primary" disabled={!recaptchaVerified}>
           🚀 Registrarse Ahora
         </Button>
       </div>
 
-      {/* Puedes mantener ProcessStatus si ya lo usabas en otras pantallas */}
       <ProcessStatus
         show={showStatus}
         title={statusTitle}
@@ -368,7 +357,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
         progress={statusProgress}
       />
 
-      {/* === DOCK INFERIOR: Toast + Tarjeta de Estado (Depuración/Progreso) === */}
+      {/* Dock inferior: Toast + Estado */}
       <div
         style={{
           position: 'fixed',
@@ -382,12 +371,11 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
           maxWidth: '92vw'
         }}
       >
-        {/* Toast flotante (usando estilos ya definidos) */}
         <div style={toastStyles} role="status" aria-live="polite">
           <div style={{ fontSize: 18, lineHeight: 1, marginTop: 2 }}>
             {toastType === 'success' ? '✅' : toastType === 'warning' ? '⚠️' : '❌'}
           </div>
-          <div style={{ whiteSpace: 'pre-line' }}>{toastMessage}</div>
+        <div style={{ whiteSpace: 'pre-line' }}>{toastMessage}</div>
           <button
             type="button"
             onClick={() => setToastOpen(false)}
@@ -406,7 +394,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
           </button>
         </div>
 
-        {/* Tarjeta de estado compacta (profesional y visual) */}
         {showStatus && (
           <div
             style={{
