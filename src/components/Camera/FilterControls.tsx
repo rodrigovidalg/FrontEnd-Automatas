@@ -1,106 +1,43 @@
-import React, { useState } from 'react';
-import { FILTERS } from '../../utils/constants';
+// src/components/Camera/FilterControls.tsx
+// Versión simplificada: solo brillo y contraste.
+// Si tu código lo renderiza aparte, lo dejo desacoplado.
 
-interface FilterControlsProps {
-  onFilterChange: (filter: string) => void;
-  onFilterSettingsChange: (brightness: number, contrast: number) => void;
+import React from "react";
+
+interface Props {
+  brightness: number;           // 50..150
+  contrast: number;             // 50..150
+  onBrightness(v: number): void;
+  onContrast(v: number): void;
 }
 
-const FilterControls: React.FC<FilterControlsProps> = ({
-  onFilterChange,
-  onFilterSettingsChange
-}) => {
-  const [activeFilter, setActiveFilter] = useState('normal');
-  const [brightness, setBrightness] = useState(100);
-  const [contrast, setContrast] = useState(100);
-
-  const handleFilterClick = (filter: string) => {
-    setActiveFilter(filter);
-    onFilterChange(filter);
-  };
-
-  const handleBrightnessChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value);
-    setBrightness(value);
-    onFilterSettingsChange(value, contrast);
-  };
-
-  const handleContrastChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value);
-    setContrast(value);
-    onFilterSettingsChange(brightness, value);
-  };
-
+export default function FilterControls({ brightness, contrast, onBrightness, onContrast }: Props) {
   return (
-    <div className="live-editor">
-      {/* Filtros */}
-      <div className="editor-section">
-        <div className="editor-title">🎨 Filtros</div>
-        <div className="filter-grid">
-          {FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              className={`filter-btn ${activeFilter === filter.value ? 'active' : ''}`}
-              onClick={() => handleFilterClick(filter.value)}
-              title={filter.name}
-            >
-              {filter.icon}
-            </button>
-          ))}
-        </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium">Brillo: {brightness}%</label>
+        <input
+          type="range"
+          min={50}
+          max={150}
+          step={1}
+          value={brightness}
+          onChange={e => onBrightness(parseInt(e.target.value))}
+          className="w-full"
+        />
       </div>
-      
-      {/* Ajustes */}
-      <div className="editor-section">
-        <div className="editor-title">⚙️ Ajustes</div>
-        
-        <div className="slider-container">
-          <div className="slider-label">
-            <span>Brillo</span>
-            <span className="slider-value">{brightness}%</span>
-          </div>
-          <input
-            type="range"
-            className="slider"
-            min="50"
-            max="150"
-            value={brightness}
-            onChange={handleBrightnessChange}
-          />
-        </div>
-        
-        <div className="slider-container">
-          <div className="slider-label">
-            <span>Contraste</span>
-            <span className="slider-value">{contrast}%</span>
-          </div>
-          <input
-            type="range"
-            className="slider"
-            min="50"
-            max="150"
-            value={contrast}
-            onChange={handleContrastChange}
-          />
-        </div>
-      </div>
-      
-      {/* Emoji Gallery */}
-      <div className="editor-section">
-        <div className="editor-title">😊 Efectos Emoji</div>
-        <div className="filter-grid">
-          <button className="emoji-btn">🌟</button>
-          <button className="emoji-btn">💫</button>
-          <button className="emoji-btn">🎈</button>
-          <button className="emoji-btn">🎭</button>
-          <button className="emoji-btn">🦄</button>
-          <button className="emoji-btn">🌈</button>
-          <button className="emoji-btn">🔥</button>
-          <button className="emoji-btn">✨</button>
-        </div>
+      <div>
+        <label className="block text-sm font-medium">Contraste: {contrast}%</label>
+        <input
+          type="range"
+          min={50}
+          max={150}
+          step={1}
+          value={contrast}
+          onChange={e => onContrast(parseInt(e.target.value))}
+          className="w-full"
+        />
       </div>
     </div>
   );
-};
-
-export default FilterControls;
+}

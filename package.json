@@ -11,6 +11,7 @@
     "@types/node": "^16.18.126",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
+    "@vladmandic/face-api": "^1.7.15",
     "crypto-js": "^4.2.0",
     "http-proxy-middleware": "^2.0.9",
     "jspdf": "^3.0.3",
