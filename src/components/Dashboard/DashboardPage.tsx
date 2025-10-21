@@ -222,6 +222,7 @@ const API_BASE = 'https://lexicoreapi-production.up.railway.app';
 const API = {
   upload: `${API_BASE}/api/documentos`,
   analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
+  reportPdf: (id: number | string) => `${API_BASE}/api/reportes/analisis/${id}`,
   health: `${API_BASE}/api/health`
 };
 
@@ -274,19 +275,35 @@ const Icon = {
  *  ======================= */
 async function uploadDocumento(file: File, usuarioId: number, codigoIso: LangISO): Promise<number> {
   const fd = new FormData();
+  // clave más común
   fd.append('file', file);
+  // alias frecuente en backends .NET hispanos
+  fd.append('archivo', file);
+
   fd.append('usuarioId', String(usuarioId ?? 1));
+
+  // muchos backends esperan "lang"
+  fd.append('lang', codigoIso);
+  // tu front además usa "codigoIso"; deja ambos por si acaso
   fd.append('codigoIso', codigoIso);
 
-  const res = await fetch(API.upload, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error('Error al subir documento');
-  const data: any = await res.json();
+  // si hay token en localStorage, lo mandamos (por si PROD exige auth)
+  const token = localStorage.getItem('token') || '';
+
+  const res = await fetch(API.upload, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: fd
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Error al subir documento (${res.status}): ${text || res.statusText}`);
+  }
+
+  const data: any = await res.json().catch(() => ({}));
   const id =
-    data?.id ??
-    data?.documentoId ??
-    data?.documentId ??
-    data?.data?.id ??
-    data?.data?.documentoId;
+    data?.id ?? data?.documentoId ?? data?.documentId ?? data?.data?.id ?? data?.data?.documentoId;
 
   if (typeof id !== 'number' && typeof id !== 'string') {
     throw new Error('La API no devolvió el id del documento');
@@ -294,11 +311,26 @@ async function uploadDocumento(file: File, usuarioId: number, codigoIso: LangISO
   return Number(id);
 }
 
+
 async function analizarDocumento(documentoId: number | string): Promise<any> {
-  const res = await fetch(API.analyze(documentoId), { method: 'POST' });
-  if (!res.ok) throw new Error('Error en análisis del documento');
+  const token = localStorage.getItem('token') || '';
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+  // 1) intenta POST (muchas APIs lo esperan así)
+  let res = await fetch(API.analyze(documentoId), { method: 'POST', headers });
+  if (!res.ok) {
+    // 2) si POST falla por método/ruta (405/404), intenta GET
+    if (res.status === 405 || res.status === 404) {
+      res = await fetch(API.analyze(documentoId), { method: 'GET', headers });
+    }
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Error en análisis (${res.status}): ${text || res.statusText}`);
+  }
   return res.json();
 }
+
 
 function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangISO): AnalysisResult {
   const totalWords =
@@ -374,6 +406,7 @@ const GREEN = {
  *  Componente
  *  ======================= */
 const DashboardPage: React.FC = () => {
+  const [documentId, setDocumentId] = useState<number | null>(null);
   const auth: any = useAuth();
   const { authState } = auth;
   const logoutFn: undefined | (() => Promise<void> | void) =
@@ -431,25 +464,43 @@ const DashboardPage: React.FC = () => {
   };
 
   const onProcess = async () => {
-    if (!selectedFile) { alert('.txt required'); return; }
-    try {
-      setLoading(true); setErrorMsg(null);
+  if (!selectedFile) { alert('.txt required'); return; }
+  try {
+    setLoading(true); setErrorMsg(null);
 
-      const usuarioIdNumeric = Number((authState.user?.id as any) ?? 1) || 1;
-      const docId = await uploadDocumento(selectedFile, usuarioIdNumeric, lang);
+    const usuarioIdNumeric = Number((authState.user?.id as any) ?? 1) || 1;
 
-      const apiResp = await analizarDocumento(docId);
+    // 1) Subir documento
+    const docId = await uploadDocumento(selectedFile, usuarioIdNumeric, lang);
 
-      const normalized = coerceToAnalysisResult(apiResp, rawText, lang);
-      setResult(normalized);
-    } catch (err: any) {
-      const localResult = analyzeLocally(rawText, lang);
-      setResult(localResult);
-      setErrorMsg(err?.message || 'Falling back to local analysis.');
-    } finally {
-      setLoading(false);
+    // 2) Normalizar ID y guardarlo en estado
+    const normalizedId =
+      typeof docId === 'object' && docId !== null && 'id' in docId
+        ? Number((docId as any).id)
+        : Number(docId);
+
+    if (!Number.isFinite(normalizedId)) {
+      throw new Error('El backend no devolvió un documentoId válido.');
     }
-  };
+    setDocumentId(normalizedId);
+
+    // 3) Analizar en backend con ese ID
+    const apiResp = await analizarDocumento(normalizedId);
+
+    // 4) Normalizar respuesta para la UI
+    const normalized = coerceToAnalysisResult(apiResp, rawText, lang);
+    setResult(normalized);
+
+  } catch (err: any) {
+    // Fallback local: mostrará resultados pero NO se habilitará Exportar si no se subió el doc
+    const localResult = analyzeLocally(rawText, lang);
+    setResult(localResult);
+    setErrorMsg(err?.message || 'Falling back to local analysis.');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const dataTop = useMemo(() =>
     (result?.topWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
@@ -491,37 +542,44 @@ const DashboardPage: React.FC = () => {
     ];
   }, [result, T]);
 
-  const canExport = !!result && (result.totalWords ?? 0) > 0;
+  const canExport = !!result && (result.totalWords ?? 0) > 0 && documentId !== null;
 
-  const handleExport = () => {
-    if (!canExport || !result) return;
-    const csvLines: string[] = [];
 
-    csvLines.push('Section,Item,Value');
-    csvLines.push('Summary,TotalWords,' + result.totalWords);
+  const handleExport = async () => {
+  if (!canExport || !result || documentId == null) return;
 
-    csvLines.push('TopWords,Word,Count');
-    for (const x of result.topWords) csvLines.push(`TopWords,${x.word},${x.count}`);
+  try {
+    const token = localStorage.getItem('token') || '';
+    const res = await fetch(API.reportPdf(documentId), {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
+    }
 
-    csvLines.push('RareWords,Word,Count');
-    for (const x of result.rareWords) csvLines.push(`RareWords,${x.word},${x.count}`);
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/pdf')) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
+    }
 
-    csvLines.push('Pronouns,Pronoun,Count');
-    for (const x of dataPronouns) csvLines.push(`Pronouns,${x.name},${x.value}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
 
-    csvLines.push('Persons,Name,Count');
-    for (const x of dataPersons) csvLines.push(`Persons,${x.name},${x.value}`);
-
-    csvLines.push('Other,Category,Count');
-    for (const x of dataOther) csvLines.push(`Other,${x.name},${x.value}`);
-
-    const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'lexical_analysis.csv';
+    a.href = url;
+    a.download = `analisis_lexico_doc_${documentId}.pdf`;
     a.click();
-    URL.revokeObjectURL(a.href);
-  };
+
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    alert(e?.message || 'Error al exportar PDF');
+  }
+};
+;
+
 
   /** ====== Componente gráfico genérico ====== */
   const ChartCard: React.FC<{
