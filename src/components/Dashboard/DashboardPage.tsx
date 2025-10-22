@@ -218,13 +218,13 @@ const API = {
   analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
   reportPdf: (id: number | string) => `${API_BASE}/api/reportes/analisis/${id}`,
   reportEmail: (id: number | string, to?: string) =>
-  `${API_BASE}/api/reportes/analisis/${id}/enviar${to ? `?to=${encodeURIComponent(to)}` : ''}`,
+    `${API_BASE}/api/reportes/analisis/${id}/enviar${to ? `?to=${encodeURIComponent(to)}` : ''}`,
 };
 
 async function uploadDocumento(file: File, usuarioId: number, codigoIso: 'es'|'en'|'ru') {
   const fd = new FormData();
-  fd.append('file', file);        // clave típica
-  fd.append('archivo', file);     // alias común en .NET hispano
+  fd.append('file', file);
+  fd.append('archivo', file);
   fd.append('usuarioId', String(usuarioId ?? 1));
   fd.append('lang', codigoIso);
   fd.append('codigoIso', codigoIso);
@@ -244,7 +244,6 @@ async function uploadDocumento(file: File, usuarioId: number, codigoIso: 'es'|'e
 
 async function analizarDocumento(documentoId: number | string) {
   const token = localStorage.getItem('token') || '';
-  // intenta POST y si falla, GET:
   let resp = await fetch(API.analyze(documentoId), { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!resp.ok && (resp.status === 404 || resp.status === 405)) {
     resp = await fetch(API.analyze(documentoId), { method: 'GET', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -258,10 +257,8 @@ async function analizarDocumento(documentoId: number | string) {
  *  COMPONENTE PRINCIPAL
  *  ======================= */
 const DashboardPage: React.FC = () => {
-  // ✅ Usar AuthContext correctamente
   const { authState, logout } = useAuth();
   
-  // ✅ Obtener nombre del usuario desde authState.user
   const displayName = 
     authState.user?.fullName || 
     authState.user?.nickname || 
@@ -278,9 +275,7 @@ const DashboardPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCharts, setShowCharts] = useState(false);
 
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const T = UI_STR[uiLang];
 
   /** Leer archivo .txt */
@@ -304,100 +299,134 @@ const DashboardPage: React.FC = () => {
 
   /** Procesar análisis */
   const onProcess = async () => {
-  if (!selectedFile) return;
-  setLoading(true);
-  setErrorMsg(null);
-  setResult(null);
-  setShowCharts(false);
+    if (!selectedFile) return;
+    setLoading(true);
+    setErrorMsg(null);
+    setResult(null);
+    setShowCharts(false);
 
-  try {
-    // id de usuario (ajusta si tu AuthContext lo guarda en otro campo)
-    const usuarioId = Number((authState?.user?.id as any) ?? 1) || 1;
+    try {
+      const usuarioId = Number((authState?.user?.id as any) ?? 1) || 1;
+      const docId = await uploadDocumento(selectedFile, usuarioId, lang);
+      setDocumentId(docId);
 
-    // 1) Subir documento y guardar id
-    const docId = await uploadDocumento(selectedFile, usuarioId, lang);
-    setDocumentId(docId);
+      const apiResp = await analizarDocumento(docId);
+      const normalized = analyzeLocally(rawText, lang);
+      normalized.totalWords = apiResp?.totalWords ?? apiResp?.totalPalabras ?? normalized.totalWords;
 
-    // 2) Pedir análisis al backend
-    const apiResp = await analizarDocumento(docId);
-
-    // 3) Si tu API ya devuelve todo lo necesario, úsalo directo.
-    //    Si no, mezcla con el fallback local:
-    const normalized = analyzeLocally(rawText, lang);
-    // try-map opcional de campos si tu API los tiene con otros nombres:
-    normalized.totalWords = apiResp?.totalWords ?? apiResp?.totalPalabras ?? normalized.totalWords;
-    // ... (agrega mapeos que necesites)
-
-    setResult(normalized);
-  } catch (err: any) {
-    // Fallback local si algo falla
-    setResult(analyzeLocally(rawText, lang));
-    setErrorMsg(err?.message || 'Falling back to local analysis.');
-  } finally {
-    setLoading(false);
-  }
-};
-
+      setResult(normalized);
+    } catch (err: any) {
+      setResult(analyzeLocally(rawText, lang));
+      setErrorMsg(err?.message || 'Falling back to local analysis.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /** Exportar resultados */
   const handleExport = async () => {
-  if (!result || documentId == null) return;
-  const userMail = authState?.user?.email || 'tu correo';
-  const send = window.confirm(`¿Quieres ENVIAR el PDF al correo ${userMail}? 
+    if (!result || documentId == null) return;
+    const userMail = authState?.user?.email || 'tu correo';
+    const send = window.confirm(`¿Quieres ENVIAR el PDF al correo ${userMail}? 
 Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
-  if (send) {
-    await handleSendEmail();
-    return;
-  }
-  // Descarga PDF (tal como ya lo tenías)
-  try {
-    const token = localStorage.getItem('token') || '';
-    const res = await fetch(API.reportPdf(documentId), {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
+    
+    if (send) {
+      await handleSendEmail();
+      return;
     }
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/pdf')) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
+    
+    // Descarga PDF
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(API.reportPdf(documentId), {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+      
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
+      }
+      
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/pdf')) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
+      }
+      
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analisis_lexico_doc_${documentId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e?.message || 'Error al exportar PDF');
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analisis_lexico_doc_${documentId}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (e: any) {
-    alert(e?.message || 'Error al exportar PDF');
-  }
-};
+  };
 
+  /** ✅ Enviar email MEJORADO */
+  const handleSendEmail = async () => {
+    if (!result || documentId == null) return;
+    
+    try {
+      const token = localStorage.getItem('token') || '';
+      const userEmail = authState?.user?.email?.trim() || '';
+      
+      // ✅ Validación del email
+      if (!userEmail) {
+        alert('❌ No se encontró un email válido en tu sesión.');
+        return;
+      }
 
-const handleSendEmail = async () => {
-  if (!result || documentId == null) return;
-  try {
-    const token = localStorage.getItem('token') || '';
-    const res = await fetch(API.reportEmail(documentId, authState?.user?.email || ''), {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
-    });
-    if (res.status === 401) { alert('Sesión expirada'); logout(); return; }
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`No se pudo enviar el reporte (${res.status}): ${text || res.statusText}`);
+      console.log('📧 Enviando email a:', userEmail);
+      console.log('📄 Documento ID:', documentId);
+      console.log('🔗 URL:', API.reportEmail(documentId, userEmail));
+
+      const res = await fetch(API.reportEmail(documentId, userEmail), {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'Content-Type': 'application/json'  // ✅ Agregado
+        }
+      });
+
+      console.log('📊 Response status:', res.status);
+
+      if (res.status === 401) {
+        alert('🔐 Sesión expirada. Por favor, inicia sesión nuevamente.');
+        logout();
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        console.error('❌ Error response:', text);
+        
+        let errorMsg = `Error ${res.status}: ${res.statusText}`;
+        
+        try {
+          const errorJson = JSON.parse(text);
+          errorMsg = errorJson?.mensaje || errorJson?.message || errorMsg;
+        } catch {
+          // Si no es JSON, usar el texto tal cual
+          errorMsg = text || errorMsg;
+        }
+        
+        throw new Error(errorMsg);
+      }
+
+      const data = await res.json().catch(() => ({}));
+      console.log('✅ Response data:', data);
+      
+      alert(`✅ ${data?.mensaje || 'Reporte enviado correctamente'}\n📧 Destinatario: ${userEmail}`);
+      
+    } catch (e: any) {
+      console.error('❌ Error completo:', e);
+      alert(`❌ Error al enviar el PDF por correo:\n\n${e?.message || 'Error desconocido'}`);
     }
-    alert('📧 Reporte enviado al correo correctamente.');
-  } catch (e: any) {
-    alert(e?.message || 'Error al enviar el PDF por correo');
-  }
-};
-
-
+  };
 
   /** Cerrar sesión */
   const handleLogout = () => {
@@ -408,7 +437,7 @@ const handleSendEmail = async () => {
 
   const canExport = !!result && documentId !== null;
 
-  // Si el usuario está viendo las gráficas, mostrar el componente ChartsView
+  // Si el usuario está viendo las gráficas
   if (showCharts && result) {
     return (
       <ChartsView
@@ -419,7 +448,7 @@ const handleSendEmail = async () => {
     );
   }
 
-  // Vista principal (resultados sin gráficas)
+  // Vista principal
   return (
     <div className="dash">
       {/* Header */}
@@ -430,7 +459,6 @@ const handleSendEmail = async () => {
         </div>
 
         <div className="dash__actions">
-          {/* Selector de idioma de la INTERFAZ */}
           <div className="lang-select" style={{alignItems:'stretch'}}>
             <label htmlFor="uiLang" className="btn lang-label" style={{display:'inline-flex',gap:10,alignItems:'center'}}>
               <Icon.Globe/> {T.uiLangLabel}
@@ -468,7 +496,6 @@ const handleSendEmail = async () => {
 
       {/* Barra superior */}
       <section className="bar">
-        {/* Cargar TXT */}
         <div className="file-picker">
           <button
             type="button"
@@ -495,7 +522,6 @@ const handleSendEmail = async () => {
           </span>
         </div>
 
-        {/* Idioma del análisis */}
         <div className="lang-select" style={{alignItems:'stretch'}}>
           <label htmlFor="langSelect" className="btn lang-label" style={{display:'inline-flex',gap:10,alignItems:'center'}}>
             {T.analysisLangLabel}
@@ -513,7 +539,6 @@ const handleSendEmail = async () => {
           </select>
         </div>
 
-        {/* Acciones */}
         <div className="actions">
           <button className="btn btn--primary" onClick={onProcess} disabled={!selectedFile || loading}>
             <span style={{display:'inline-flex',gap:10,alignItems:'center'}}>
@@ -564,7 +589,7 @@ const handleSendEmail = async () => {
           </div>
         </section>
 
-        {/* Resultados (SIN gráficas) */}
+        {/* Resultados */}
         <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
           <div className="card__header">{T.resultsHeader}</div>
           <div className="card__body">
@@ -575,7 +600,6 @@ const handleSendEmail = async () => {
               </div>
             ) : (
               <>
-                {/* Métricas rápidas */}
                 <div className="grid-2">
                   <div className="metric"><span>{T.metrics.total}</span><strong>{result.totalWords}</strong></div>
                   <div className="metric"><span>{T.metrics.pronouns}</span><strong>{result.pronouns.length}</strong></div>
@@ -585,7 +609,6 @@ const handleSendEmail = async () => {
                   <div className="metric"><span>{T.metrics.topUnique}</span><strong>{result.topWords.length}</strong></div>
                 </div>
 
-                {/* Botón para ir al dashboard de gráficas */}
                 <button
                   className="btn btn--dashboard"
                   onClick={() => setShowCharts(true)}
