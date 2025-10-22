@@ -1,5 +1,5 @@
 /* =======================
-   Dashboard — Scoped CSS
+   Dashboard â€" Scoped CSS
    ======================= */
 
 :root, .dash {
@@ -8,7 +8,7 @@
   --card: #ffffff;
   --muted: #6b7280;
 
-  --primary-700: #2e5e54;  /* Botón principal */
+  --primary-700: #2e5e54;  /* BotÃ³n principal */
   --primary-600: #3a6f64;  /* Hover */
   --primary-500: #447c6f;  /* Acentos / barras */
   --primary-100: #e6f1ee;  /* Chips claros */
@@ -63,7 +63,7 @@
 .dash .btn:active{ transform:translateY(0); }
 .dash .btn:focus-visible{ outline:none; box-shadow: var(--shadow), var(--ring); }
 .dash .btn--primary{ background:var(--primary-700); color:#fff; border-color:transparent; }
-/* Amarillo para botón "Limpiar" */
+/* Amarillo para botÃ³n "Limpiar" */
 .dash .btn--warning{
   background: #f59e0b;
   color: #fff;
@@ -153,7 +153,7 @@
   overflow-y:auto;
 }
 
-/* Resultados / tipografía */
+/* Resultados / tipografÃ­a */
 .dash .muted{ color:var(--muted); }
 .dash .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .dash .metric{ margin-bottom:10px; }
@@ -231,7 +231,7 @@
 .dash .btn--danger:hover{ background: var(--danger-600); }
 .dash .btn--danger:focus-visible{ outline: none; box-shadow: var(--shadow), 0 0 0 4px rgba(220,38,38,.20); }
 
-/* Títulos en verde del tema */
+/* TÃ­tulos en verde del tema */
 .dash h1{ color: var(--primary-700); }
 .dash .card__header{ color: var(--primary-700); font-weight: 800; }
 
@@ -243,3 +243,240 @@
 /* Limpiar deshabilitado */
 .dash .btn--warning:disabled{ background: #e5e7eb; color: #9ca3af; border-color: #e5e7eb; box-shadow: none; }
 .dash .btn--warning:disabled:hover{ background: #e5e7eb; }
+
+/* =======================
+   ESTILOS ADICIONALES PARA CHARTS VIEW
+   (Paleta de grises y negro)
+   ======================= */
+
+/* Botón "Ir al Dashboard" */
+.dash .btn--dashboard {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  color: #ffffff;
+  border: 2px solid #404040;
+  box-shadow: 0 10px 30px rgba(26, 26, 26, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dash .btn--dashboard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.dash .btn--dashboard:hover {
+  background: linear-gradient(135deg, #2d2d2d 0%, #404040 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(26, 26, 26, 0.4), 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dash .btn--dashboard:hover::before {
+  left: 100%;
+}
+
+.dash .btn--dashboard:active {
+  transform: translateY(0);
+  box-shadow: 0 5px 15px rgba(26, 26, 26, 0.3);
+}
+
+/* Dashboard de gráficas */
+.charts-dashboard {
+  min-height: 100vh;
+  padding: 24px;
+  background: 
+    radial-gradient(1200px 600px at -10% -10%, #e5e7eb 0%, transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, #f3f4f6 0%, transparent 60%),
+    #f9fafb;
+}
+
+.charts-dashboard__header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.charts-dashboard__title {
+  flex: 1;
+  margin: 0;
+  font-size: 2rem;
+  color: #1a1a1a;
+  font-weight: 800;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Botón de regreso */
+.dash .btn--back {
+  background: #ffffff;
+  color: #1a1a1a;
+  border: 2px solid #d1d5db;
+  font-weight: 700;
+  padding: 12px 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.25s ease;
+}
+
+.dash .btn--back:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Grid de gráficas (2x2) */
+.charts-dashboard__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tarjeta de gráfica individual */
+.chart-card {
+  background: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+  animation: slideIn 0.5s ease-out backwards;
+}
+
+.chart-card:nth-child(1) { animation-delay: 0.1s; }
+.chart-card:nth-child(2) { animation-delay: 0.2s; }
+.chart-card:nth-child(3) { animation-delay: 0.3s; }
+.chart-card:nth-child(4) { animation-delay: 0.4s; }
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.chart-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 12px 28px rgba(0, 0, 0, 0.12),
+    0 6px 12px rgba(0, 0, 0, 0.08);
+  border-color: #9ca3af;
+}
+
+/* Header de la tarjeta */
+.chart-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+  border-bottom: 2px solid #404040;
+}
+
+.chart-card__header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.chart-card__badge {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+/* Cuerpo de la tarjeta con gráfica */
+.chart-card__body {
+  padding: 20px;
+  height: 380px;
+  position: relative;
+}
+
+.chart-card__body .no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6b7280;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Responsivo para gráficas */
+@media (max-width: 1200px) {
+  .charts-dashboard__grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-card__body {
+    height: 340px;
+  }
+}
+
+@media (max-width: 768px) {
+  .charts-dashboard__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .charts-dashboard__title {
+    font-size: 1.5rem;
+  }
+  
+  .chart-card__body {
+    height: 300px;
+    padding: 16px;
+  }
+}
+
+/* Efecto de hover en las barras (para recharts) */
+.recharts-bar-rectangle:hover {
+  filter: brightness(1.1);
+  transition: filter 0.2s ease;
+}
+
+/* Animación de carga suave */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.chart-card:hover .recharts-bar-rectangle {
+  animation: pulse 2s ease-in-out infinite;
+}

@@ -1,17 +1,8 @@
 // src/components/dashboard/DashboardPage.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import './dashboard.css';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  LabelList,
-} from 'recharts';
+import ChartsView from './ChartsView';
 
 type LangISO = 'es' | 'en' | 'ru';
 type UiLang = 'es' | 'en' | 'ru';
@@ -52,6 +43,7 @@ const UI_STR: Record<UiLang, any> = {
     placeholder: 'Aquí se mostrará el contenido del archivo .txt',
     resultsHeader: 'Resultados del análisis léxico',
     preProcessHint: 'Carga un .txt, elige un idioma y pulsa ',
+    goToDashboard: 'Ir al Dashboard 📊',
     metrics: {
       total: 'Total de palabras',
       pronouns: 'Pronombres distintos',
@@ -59,12 +51,6 @@ const UI_STR: Record<UiLang, any> = {
       nouns: 'Sustantivos (raíz)',
       verbs: 'Verbos (raíz)',
       topUnique: 'Top únicas',
-    },
-    charts: {
-      top: 'Top palabras',
-      rare: 'Palabras raras',
-      pronouns: 'Pronombres',
-      persons: 'Personas detectadas',
     },
   },
   en: {
@@ -87,6 +73,7 @@ const UI_STR: Record<UiLang, any> = {
     placeholder: 'The contents of the .txt file will appear here',
     resultsHeader: 'Lexical analysis results',
     preProcessHint: 'Upload a .txt, choose a language and click ',
+    goToDashboard: 'Go to Dashboard 📊',
     metrics: {
       total: 'Total words',
       pronouns: 'Distinct pronouns',
@@ -94,12 +81,6 @@ const UI_STR: Record<UiLang, any> = {
       nouns: 'Nouns (lemma)',
       verbs: 'Verbs (lemma)',
       topUnique: 'Top unique',
-    },
-    charts: {
-      top: 'Top words',
-      rare: 'Rare words',
-      pronouns: 'Pronouns',
-      persons: 'Detected persons',
     },
   },
   ru: {
@@ -122,6 +103,7 @@ const UI_STR: Record<UiLang, any> = {
     placeholder: 'Здесь появится содержимое файла .txt',
     resultsHeader: 'Результаты лексического анализа',
     preProcessHint: 'Загрузите .txt, выберите язык и нажмите ',
+    goToDashboard: 'Перейти к дашборду 📊',
     metrics: {
       total: 'Всего слов',
       pronouns: 'Местоимения (разные)',
@@ -130,14 +112,15 @@ const UI_STR: Record<UiLang, any> = {
       verbs: 'Глаголы (лемма)',
       topUnique: 'Топ (уникальные)',
     },
-    charts: {
-      top: 'Топ слова',
-      rare: 'Редкие слова',
-      pronouns: 'Местоимения',
-      persons: 'Обнаруженные персоны',
-    },
   },
 };
+
+// Iconos simplificados
+const Icon = {
+  Globe: () => <span>🌐</span>,
+};
+
+const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'English', ru: 'Русский' };
 
 /** =======================
  *  Utilidades existentes
@@ -147,8 +130,8 @@ const PRONOUNS: Record<LangISO, string[]> = {
   en: ['i','you','he','she','we','they','me','him','her','us','them','my','your','his','our','their','its'],
   ru: ['я','ты','вы','он','она','оно','мы','они','меня','тебя','вас','его','её','нас','их','мой','твой','ваш','наш','их']
 };
-const NON_WORD = /[^0-9A-Za-z\u00C0-\u024F\u0400-\u04FF'’-]+/g;
-const TRIM_PUNCT = /^[’'\-]+|[’'\-]+$/g;
+const NON_WORD = /[^0-9A-Za-z\u00C0-\u024F\u0400-\u04FF''-]+/g;
+const TRIM_PUNCT = /^[''\-]+|[''\-]+$/g;
 
 function toWords(text: string): string[] {
   return text.split(NON_WORD).map(w => w.replace(TRIM_PUNCT, '')).filter(Boolean);
@@ -213,402 +196,118 @@ function analyzeLocally(text: string, lang: LangISO): AnalysisResult {
   };
 }
 
-const LANG_LABELS: Record<LangISO, string> = { es: 'Español', en: 'English', ru: 'Русский' };
-
 /** =======================
- *  API (con .env + proxy)
+ *  Exportar a JSON
  *  ======================= */
-const API_BASE = 'https://lexicoreapi-production.up.railway.app';
-const API = {
-  upload: `${API_BASE}/api/documentos`,
-  analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
-  reportPdf: (id: number | string) => `${API_BASE}/api/reportes/analisis/${id}`,
-  health: `${API_BASE}/api/health`
-};
-
-const Icon = {
-  Upload: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Globe: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c3.866 0 7-4.03 7-9s-3.134-9-7-9-7 4.03-7 9 3.134 9 7 9zm-7-9h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
-    </svg>
-  ),
-  Play: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M8 5v14l11-7-11-7z"/>
-    </svg>
-  ),
-  Broom: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M3 21l6-6m0 0l3-3m-3 3l3 3m3-9l3-3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Refresh: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M20 7h-5m5 0l-3-3m3 3l-3 3M4 17h5m-5 0l3-3m-3 3l3 3M7 7a7 7 0 1110 10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Download: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 4v12m0 0l4-4m-4 4l-4-4M4 20h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  Doc: () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5"/>
-      <path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.5"/>
-    </svg>
-  ),
-  Power: () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2v8m6.364-4.364A8 8 0 1 1 5.636 5.636" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-};
+function exportJSON(data: any, filename = 'lexical_analysis.json') {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 /** =======================
- *  Llamadas a la API
- *  ======================= */
-async function uploadDocumento(file: File, usuarioId: number, codigoIso: LangISO): Promise<number> {
-  const fd = new FormData();
-  // clave más común
-  fd.append('file', file);
-  // alias frecuente en backends .NET hispanos
-  fd.append('archivo', file);
-
-  fd.append('usuarioId', String(usuarioId ?? 1));
-
-  // muchos backends esperan "lang"
-  fd.append('lang', codigoIso);
-  // tu front además usa "codigoIso"; deja ambos por si acaso
-  fd.append('codigoIso', codigoIso);
-
-  // si hay token en localStorage, lo mandamos (por si PROD exige auth)
-  const token = localStorage.getItem('token') || '';
-
-  const res = await fetch(API.upload, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: fd
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Error al subir documento (${res.status}): ${text || res.statusText}`);
-  }
-
-  const data: any = await res.json().catch(() => ({}));
-  const id =
-    data?.id ?? data?.documentoId ?? data?.documentId ?? data?.data?.id ?? data?.data?.documentoId;
-
-  if (typeof id !== 'number' && typeof id !== 'string') {
-    throw new Error('La API no devolvió el id del documento');
-  }
-  return Number(id);
-}
-
-
-async function analizarDocumento(documentoId: number | string): Promise<any> {
-  const token = localStorage.getItem('token') || '';
-  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
-  // 1) intenta POST (muchas APIs lo esperan así)
-  let res = await fetch(API.analyze(documentoId), { method: 'POST', headers });
-  if (!res.ok) {
-    // 2) si POST falla por método/ruta (405/404), intenta GET
-    if (res.status === 405 || res.status === 404) {
-      res = await fetch(API.analyze(documentoId), { method: 'GET', headers });
-    }
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Error en análisis (${res.status}): ${text || res.statusText}`);
-  }
-  return res.json();
-}
-
-
-function coerceToAnalysisResult(apiResp: any, fallbackText: string, lang: LangISO): AnalysisResult {
-  const totalWords =
-    apiResp?.totalWords ?? apiResp?.totalPalabras ?? apiResp?.conteoPalabras ?? null;
-
-  const topWords: FreqItem[] =
-    (apiResp?.topWords ?? apiResp?.palabrasFrecuentes ?? apiResp?.masFrecuentes)?.map((x: any) => ({
-      word: x?.word ?? x?.palabra ?? x?.token ?? '',
-      count: Number(x?.count ?? x?.frecuencia ?? x?.freq ?? 0)
-    })) ?? [];
-
-  const rareWords: FreqItem[] =
-    (apiResp?.rareWords ?? apiResp?.menosFrecuentes)?.map((x: any) => ({
-      word: x?.word ?? x?.palabra ?? x?.token ?? '',
-      count: Number(x?.count ?? x?.frecuencia ?? x?.freq ?? 0)
-    })) ?? [];
-
-  const pronouns: string[] =
-    apiResp?.pronouns ?? apiResp?.pronombres ?? apiResp?.linguistics?.pronouns ?? [];
-
-  const persons: string[] =
-    apiResp?.persons ?? apiResp?.nombresPropios ?? apiResp?.entidades?.personas ?? [];
-
-  const nounsLemma: string[] =
-    apiResp?.nounsLemma ?? apiResp?.sustantivos ?? apiResp?.lemmas?.nouns ?? [];
-
-  const verbsLemma: string[] =
-    apiResp?.verbsLemma ?? apiResp?.verbos ?? apiResp?.lemmas?.verbs ?? [];
-
-  if (
-    totalWords === null ||
-    !topWords.length ||
-    !rareWords.length ||
-    !pronouns.length ||
-    !persons.length ||
-    !nounsLemma.length ||
-    !verbsLemma.length
-  ) {
-    const localResult = analyzeLocally(fallbackText, lang);
-    return {
-      totalWords: totalWords ?? localResult.totalWords,
-      topWords: topWords.length ? topWords : localResult.topWords,
-      rareWords: rareWords.length ? rareWords : localResult.rareWords,
-      pronouns: pronouns.length ? pronouns : localResult.pronouns,
-      persons: persons.length ? persons : localResult.persons,
-      nounsLemma: nounsLemma.length ? nounsLemma : localResult.nounsLemma,
-      verbsLemma: verbsLemma.length ? verbsLemma : localResult.verbsLemma,
-      other: { ...(apiResp ?? {}), note: 'Combinado API + heurística local' }
-    };
-  }
-
-  return {
-    totalWords: Number(totalWords),
-    topWords,
-    rareWords,
-    pronouns,
-    persons,
-    nounsLemma,
-    verbsLemma,
-    other: apiResp
-  };
-}
-
-// Colores del tema (verdes)
-const GREEN = {
-  dark:  '#2e5e54',
-  mid:   '#3a6f64',
-  light: '#447c6f',
-  grid:  '#e5e7eb'
-};
-
-/** =======================
- *  Componente
+ *  COMPONENTE PRINCIPAL
  *  ======================= */
 const DashboardPage: React.FC = () => {
-  const [documentId, setDocumentId] = useState<number | null>(null);
-  const auth: any = useAuth();
-  const { authState } = auth;
-  const logoutFn: undefined | (() => Promise<void> | void) =
-    auth?.logout || auth?.signOut || auth?.logOut;
+  // ✅ Usar AuthContext correctamente
+  const { authState, logout } = useAuth();
+  
+  // ✅ Obtener nombre del usuario desde authState.user
+  const displayName = 
+    authState.user?.fullName || 
+    authState.user?.nickname || 
+    authState.user?.email?.split('@')[0] ||
+    'Usuario';
 
-  const handleLogout = async () => {
-    try {
-      if (typeof logoutFn === 'function') {
-        await logoutFn();
-      } else {
-        localStorage.clear();
-        sessionStorage.clear();
-      }
-    } finally {
-      window.location.href = '/login';
-    }
-  };
-
-  // Idioma de la INTERFAZ (nuevo)
-  const [uiLang, setUiLang] = useState<UiLang>(() => {
-    const saved = localStorage.getItem('ui_lang') as UiLang | null;
-    return saved || 'es';
-  });
-  useEffect(() => {
-    localStorage.setItem('ui_lang', uiLang);
-  }, [uiLang]);
-  const T = UI_STR[uiLang];
-
-  // Idioma del ANÁLISIS (ya existente)
+  const [uiLang, setUiLang] = useState<UiLang>('es');
   const [lang, setLang] = useState<LangISO>('es');
-
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState<string>('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showCharts, setShowCharts] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayName = useMemo(
-    () => authState.user?.fullName || authState.user?.nickname || authState.user?.email || (uiLang === 'en' ? 'User' : uiLang === 'ru' ? 'Пользователь' : 'Usuario'),
-    [authState.user, uiLang]
-  );
+  const T = UI_STR[uiLang];
 
-  // Palabras normalizadas del texto (para contar pronombres y personas)
-  const normalizedWords = useMemo(() => toWords(rawText).map(w => w.toLowerCase()), [rawText]);
-
-  const handleFile = async (file?: File | null) => {
+  /** Leer archivo .txt */
+  const handleFile = (file: File | null) => {
     if (!file) return;
-    if (!/\.txt$/i.test(file.name)) { alert('.txt only'); return; }
     setSelectedFile(file);
-    const text = await file.text();
-    setRawText(text);
     setResult(null);
     setErrorMsg(null);
+    setShowCharts(false);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      setRawText(content);
+    };
+    reader.onerror = () => {
+      setErrorMsg('Error al leer el archivo.');
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
+  /** Procesar análisis */
   const onProcess = async () => {
-  if (!selectedFile) { alert('.txt required'); return; }
-  try {
-    setLoading(true); setErrorMsg(null);
+    if (!rawText) return;
+    setLoading(true);
+    setErrorMsg(null);
+    setResult(null);
+    setShowCharts(false);
 
-    const usuarioIdNumeric = Number((authState.user?.id as any) ?? 1) || 1;
-
-    // 1) Subir documento
-    const docId = await uploadDocumento(selectedFile, usuarioIdNumeric, lang);
-
-    // 2) Normalizar ID y guardarlo en estado
-    const normalizedId =
-      typeof docId === 'object' && docId !== null && 'id' in docId
-        ? Number((docId as any).id)
-        : Number(docId);
-
-    if (!Number.isFinite(normalizedId)) {
-      throw new Error('El backend no devolvió un documentoId válido.');
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const analysisResult = analyzeLocally(rawText, lang);
+      setResult(analysisResult);
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Error en el análisis.');
+    } finally {
+      setLoading(false);
     }
-    setDocumentId(normalizedId);
+  };
 
-    // 3) Analizar en backend con ese ID
-    const apiResp = await analizarDocumento(normalizedId);
+  /** Exportar resultados */
+  const handleExport = () => {
+    if (!result) return;
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      language: lang,
+      result,
+    };
+    exportJSON(exportData, `lexical_analysis_${Date.now()}.json`);
+  };
 
-    // 4) Normalizar respuesta para la UI
-    const normalized = coerceToAnalysisResult(apiResp, rawText, lang);
-    setResult(normalized);
+  /** Cerrar sesión */
+  const handleLogout = () => {
+    if (window.confirm('¿Seguro que quieres cerrar sesión?')) {
+      logout();
+    }
+  };
 
-  } catch (err: any) {
-    // Fallback local: mostrará resultados pero NO se habilitará Exportar si no se subió el doc
-    const localResult = analyzeLocally(rawText, lang);
-    setResult(localResult);
-    setErrorMsg(err?.message || 'Falling back to local analysis.');
-  } finally {
-    setLoading(false);
+  const canExport = !!result;
+
+  // Si el usuario está viendo las gráficas, mostrar el componente ChartsView
+  if (showCharts && result) {
+    return (
+      <ChartsView
+        result={result}
+        uiLang={uiLang}
+        onBack={() => setShowCharts(false)}
+      />
+    );
   }
-};
 
-
-  const dataTop = useMemo(() =>
-    (result?.topWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
-  const dataRare = useMemo(() =>
-    (result?.rareWords ?? []).map(x => ({ name: x.word, value: x.count })), [result]);
-
-  const dataPronouns = useMemo(() => {
-    if (!result) return [];
-    const set = new Set(PRONOUNS[lang].map(p => p.toLowerCase()));
-    const counts = new Map<string, number>();
-    for (const w of normalizedWords) if (set.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
-    return Array.from(counts.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a,b)=>b.value-a.value)
-      .slice(0, 15);
-  }, [result, lang, normalizedWords]);
-
-  const dataPersons = useMemo(() => {
-    if (!result) return [];
-    const set = new Set(result.persons.map(p => p.toLowerCase()));
-    if (set.size === 0) return [];
-    const counts = new Map<string, number>();
-    for (const w of normalizedWords) if (set.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
-    return Array.from(counts.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a,b)=>b.value-a.value)
-      .slice(0, 15);
-  }, [result, normalizedWords]);
-
-  const dataOther = useMemo(() => {
-    if (!result) return [];
-    return [
-      { name: (T.metrics?.pronouns ?? 'Pronombres'), value: result.pronouns.length || 0 },
-      { name: (T.metrics?.persons ?? 'Personas'), value: result.persons.length || 0 },
-      { name: (T.metrics?.nouns ?? 'Sustantivos (raíz)'), value: result.nounsLemma.length || 0 },
-      { name: (T.metrics?.verbs ?? 'Verbos (raíz)'), value: result.verbsLemma.length || 0 },
-      { name: (T.metrics?.topUnique ?? 'Top únicas'), value: (result.topWords || []).length },
-      { name: (T.charts?.rare ?? 'Palabras raras'), value: (result.rareWords || []).length },
-    ];
-  }, [result, T]);
-
-  const canExport = !!result && (result.totalWords ?? 0) > 0 && documentId !== null;
-
-
-  const handleExport = async () => {
-  if (!canExport || !result || documentId == null) return;
-
-  try {
-    const token = localStorage.getItem('token') || '';
-    const res = await fetch(API.reportPdf(documentId), {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
-    }
-
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/pdf')) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
-    }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analisis_lexico_doc_${documentId}.pdf`;
-    a.click();
-
-    URL.revokeObjectURL(url);
-  } catch (e: any) {
-    alert(e?.message || 'Error al exportar PDF');
-  }
-};
-;
-
-
-  /** ====== Componente gráfico genérico ====== */
-  const ChartCard: React.FC<{
-    title: string;
-    data: { name: string; value: number }[];
-    color?: string;
-  }> = ({ title, data, color = GREEN.dark }) => (
-    <section className="card">
-      <div className="card__header">{title}</div>
-      <div className="card__body" style={{ height: 300 }}>
-        {data && data.length ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
-              <CartesianGrid stroke={GREEN.grid} strokeDasharray="3 3" />
-              <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={60} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="value" fill={color}>
-                <LabelList dataKey="value" position="top" />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="muted">—</div>
-        )}
-      </div>
-    </section>
-  );
-
+  // Vista principal (resultados sin gráficas)
   return (
     <div className="dash">
       {/* Header */}
@@ -720,6 +419,7 @@ const DashboardPage: React.FC = () => {
               setRawText('');
               setResult(null);
               setErrorMsg(null);
+              setShowCharts(false);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
             disabled={!selectedFile}
@@ -756,7 +456,7 @@ const DashboardPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Resultados */}
+        {/* Resultados (SIN gráficas) */}
         <section className="card" style={{borderWidth:2.5, borderStyle:'solid', borderColor:'#dfe7e5', borderRadius:18}}>
           <div className="card__header">{T.resultsHeader}</div>
           <div className="card__body">
@@ -777,13 +477,20 @@ const DashboardPage: React.FC = () => {
                   <div className="metric"><span>{T.metrics.topUnique}</span><strong>{result.topWords.length}</strong></div>
                 </div>
 
-                {/* Gráficos */}
-                <div className="charts-grid">
-                  <ChartCard title={T.charts.top} data={dataTop} />
-                  <ChartCard title={T.charts.rare} data={dataRare} color={GREEN.mid} />
-                  <ChartCard title={T.charts.pronouns} data={dataPronouns} color={GREEN.light} />
-                  <ChartCard title={T.charts.persons} data={dataPersons} color={GREEN.dark} />
-                </div>
+                {/* Botón para ir al dashboard de gráficas */}
+                <button
+                  className="btn btn--dashboard"
+                  onClick={() => setShowCharts(true)}
+                  style={{
+                    marginTop: 20,
+                    width: '100%',
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    padding: '14px 20px',
+                  }}
+                >
+                  {T.goToDashboard}
+                </button>
               </>
             )}
           </div>
