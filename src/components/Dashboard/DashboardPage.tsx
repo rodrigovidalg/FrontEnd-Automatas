@@ -211,6 +211,47 @@ function exportJSON(data: any, filename = 'lexical_analysis.json') {
   URL.revokeObjectURL(url);
 }
 
+// === API ===
+const API_BASE = 'https://lexicoreapi-production.up.railway.app';
+const API = {
+  upload: `${API_BASE}/api/documentos`,
+  analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
+  reportPdf: (id: number | string) => `${API_BASE}/api/reportes/analisis/${id}`,
+};
+
+async function uploadDocumento(file: File, usuarioId: number, codigoIso: 'es'|'en'|'ru') {
+  const fd = new FormData();
+  fd.append('file', file);        // clave típica
+  fd.append('archivo', file);     // alias común en .NET hispano
+  fd.append('usuarioId', String(usuarioId ?? 1));
+  fd.append('lang', codigoIso);
+  fd.append('codigoIso', codigoIso);
+
+  const token = localStorage.getItem('token') || '';
+  const res = await fetch(API.upload, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: fd,
+  });
+  if (!res.ok) throw new Error(`Error al subir documento (${res.status})`);
+  const data = await res.json().catch(() => ({} as any));
+  const id = data?.id ?? data?.documentoId ?? data?.data?.id ?? data?.data?.documentoId;
+  if (id == null) throw new Error('La API no devolvió documentoId');
+  return Number(id);
+}
+
+async function analizarDocumento(documentoId: number | string) {
+  const token = localStorage.getItem('token') || '';
+  // intenta POST y si falla, GET:
+  let resp = await fetch(API.analyze(documentoId), { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  if (!resp.ok && (resp.status === 404 || resp.status === 405)) {
+    resp = await fetch(API.analyze(documentoId), { method: 'GET', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  }
+  if (!resp.ok) throw new Error(`Error en análisis (${resp.status})`);
+  return resp.json();
+}
+
+
 /** =======================
  *  COMPONENTE PRINCIPAL
  *  ======================= */
@@ -225,6 +266,7 @@ const DashboardPage: React.FC = () => {
     authState.user?.email?.split('@')[0] ||
     'Usuario';
 
+  const [documentId, setDocumentId] = useState<number | null>(null);
   const [uiLang, setUiLang] = useState<UiLang>('es');
   const [lang, setLang] = useState<LangISO>('es');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -259,33 +301,71 @@ const DashboardPage: React.FC = () => {
 
   /** Procesar análisis */
   const onProcess = async () => {
-    if (!rawText) return;
-    setLoading(true);
-    setErrorMsg(null);
-    setResult(null);
-    setShowCharts(false);
+  if (!selectedFile) return;
+  setLoading(true);
+  setErrorMsg(null);
+  setResult(null);
+  setShowCharts(false);
 
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const analysisResult = analyzeLocally(rawText, lang);
-      setResult(analysisResult);
-    } catch (error: any) {
-      setErrorMsg(error?.message || 'Error en el análisis.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    // id de usuario (ajusta si tu AuthContext lo guarda en otro campo)
+    const usuarioId = Number((authState?.user?.id as any) ?? 1) || 1;
+
+    // 1) Subir documento y guardar id
+    const docId = await uploadDocumento(selectedFile, usuarioId, lang);
+    setDocumentId(docId);
+
+    // 2) Pedir análisis al backend
+    const apiResp = await analizarDocumento(docId);
+
+    // 3) Si tu API ya devuelve todo lo necesario, úsalo directo.
+    //    Si no, mezcla con el fallback local:
+    const normalized = analyzeLocally(rawText, lang);
+    // try-map opcional de campos si tu API los tiene con otros nombres:
+    normalized.totalWords = apiResp?.totalWords ?? apiResp?.totalPalabras ?? normalized.totalWords;
+    // ... (agrega mapeos que necesites)
+
+    setResult(normalized);
+  } catch (err: any) {
+    // Fallback local si algo falla
+    setResult(analyzeLocally(rawText, lang));
+    setErrorMsg(err?.message || 'Falling back to local analysis.');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   /** Exportar resultados */
-  const handleExport = () => {
-    if (!result) return;
-    const exportData = {
-      timestamp: new Date().toISOString(),
-      language: lang,
-      result,
-    };
-    exportJSON(exportData, `lexical_analysis_${Date.now()}.json`);
-  };
+  const handleExport = async () => {
+  if (!result || documentId == null) return;
+  try {
+    const token = localStorage.getItem('token') || '';
+    const res = await fetch(API.reportPdf(documentId), {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/pdf')) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analisis_lexico_doc_${documentId}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    alert(e?.message || 'Error al exportar PDF');
+  }
+};
+
 
   /** Cerrar sesión */
   const handleLogout = () => {
@@ -294,7 +374,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const canExport = !!result;
+  const canExport = !!result && documentId !== null;
 
   // Si el usuario está viendo las gráficas, mostrar el componente ChartsView
   if (showCharts && result) {
