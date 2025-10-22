@@ -32,7 +32,7 @@ type UiLang = 'es' | 'en' | 'ru';
 const CHART_LABELS: Record<UiLang, any> = {
   es: {
     backButton: '← Volver a Resultados',
-    dashboardTitle: 'Dashboard de Visualizaciones',
+    dashboardTitle: 'Dashboard',
     top: 'Top Palabras Más Frecuentes',
     rare: 'Palabras Menos Frecuentes',
     pronouns: 'Distribución de Pronombres',

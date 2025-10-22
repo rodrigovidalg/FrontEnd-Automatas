@@ -24,7 +24,7 @@ type AnalysisResult = {
  * ======================= */
 const UI_STR: Record<UiLang, any> = {
   es: {
-    title: 'Análisis y Dashboard Léxico',
+    title: 'Análisis Léxico',
     subtitle: 'Frontend · Visualización · Reportes · Dashboard',
     welcome: 'Bienvenido',
     uiLangLabel: 'Interfaz',
