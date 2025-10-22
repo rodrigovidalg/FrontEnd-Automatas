@@ -67,29 +67,42 @@ export function clearPendingFaces(opts?: { face?: boolean; card?: boolean }) {
 /* ============================================================
  * NUEVO: sendCardNow — wrapper defensivo
  * ============================================================
- * Algunos backends aceptan POST sin body; otros esperan {UsuarioId}.
- * Yo intento con body y, si falla con 4xx típico, reintento sin body.
+ * Algunos backends aceptan POST sin body; otros esperan {usuarioId} o {UsuarioId}.
+ * Intento: 1) usuarioId, 2) UsuarioId, 3) sin body.
  */
 
 export async function sendCardNow(usuarioId?: string) {
-  // intento #1: con body (más explícito)
+  // intento #1: con body usando `usuarioId`
   try {
     return await api(API_ROUTES.SEND_CARD_NOW, {
       method: 'POST',
-      body: usuarioId ? JSON.stringify({ UsuarioId: usuarioId }) : undefined,
+      body: usuarioId ? JSON.stringify({ usuarioId: Number(usuarioId) }) : undefined,
       auth: true,
     });
   } catch (e: any) {
-    // Si el back no acepta body o formato → intento sin body
     const msg = (e?.message || '').toLowerCase();
-    const isFormatErr = msg.includes('415') || msg.includes('unsupported') || msg.includes('bad request') || msg.includes('400');
-    if (!isFormatErr) throw e;
+    const looksFormat =
+      msg.includes('415') ||
+      msg.includes('unsupported') ||
+      msg.includes('bad request') ||
+      msg.includes('400');
 
-    // intento #2: sin body
-    return api(API_ROUTES.SEND_CARD_NOW, {
-      method: 'POST',
-      auth: true,
-    });
+    if (!looksFormat) throw e;
+
+    // intento #2: con body usando `UsuarioId`
+    try {
+      return await api(API_ROUTES.SEND_CARD_NOW, {
+        method: 'POST',
+        body: usuarioId ? JSON.stringify({ UsuarioId: Number(usuarioId) }) : undefined,
+        auth: true,
+      });
+    } catch {
+      // intento #3: sin body
+      return api(API_ROUTES.SEND_CARD_NOW, {
+        method: 'POST',
+        auth: true,
+      });
+    }
   }
 }
 
@@ -105,8 +118,7 @@ export async function sendCardNow(usuarioId?: string) {
  *  3) Si NO hay pendingCardFaceB64:
  *      - Simplemente invoca sendCardNow().
  *
- * No borro nada del storage por default (para que el flujo siguiente pueda reutilizar),
- * pero dejo flags para limpiar si lo deseas.
+ * Limpieza opcional de localStorage al final (clearAfter).
  */
 
 export async function sendCardWithOptionalEffects(options: {

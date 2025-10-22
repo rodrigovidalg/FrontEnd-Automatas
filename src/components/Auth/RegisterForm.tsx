@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
 // Servicios
 import { api } from '../../services/api';
-import { saveFaceToDB } from '../../services/facialAuthService';
+import { saveFaceToDB, sendCardWithOptionalEffects } from '../../services/facialAuthService';
 import { API_ROUTES, COLORS } from '../../utils/constants';
 import { validatePassword } from '../../utils/validation';
 
@@ -27,6 +27,7 @@ type ToastType = 'success' | 'warning' | 'error';
  * 3. Mostrar éxito INMEDIATAMENTE
  * 4. En background (NO bloquea):
  *    - Asociar biometría (si hay foto pendiente)
+ *    - Reenvío con efectos (si corresponde) y restauración de segmentada
  *    - El email ya está siendo enviado por el backend
  */
 const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
@@ -93,7 +94,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
     setToastOpen(true);
     
     // Limpiar timeout anterior
-    window.clearTimeout((showToast as any)._t);
+    (window as any).clearTimeout((showToast as any)._t);
     (showToast as any)._t = window.setTimeout(() => setToastOpen(false), ms);
   };
 
@@ -253,20 +254,28 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
       );
 
       // ===== FASE 4: TAREAS EN BACKGROUND (NO BLOQUEAN) =====
-      
       // 4A. Asociar biometría (si hay foto pendiente)
       const pendingFace = localStorage.getItem('pendingFaceB64');
       if (pendingFace) {
         setTimeout(async () => {
           try {
+            // Guardamos la segmentada en BD (ACTIVA)
             await saveFaceToDB(String(userId), pendingFace);
-            localStorage.removeItem('pendingFaceB64');
             console.log('[BIOMETRIA] Asociada correctamente');
-            
+
             showToast('success', '📸 Biometría facial vinculada exitosamente');
+
+            // 4B. Reenvío reforzado del carnet (con efectos si existen) y restauración de segmentada
+            try {
+              await sendCardWithOptionalEffects({ usuarioId: String(userId), clearAfter: true });
+              console.log('[CARNET] Enviado con efectos (si había) y segmentada restaurada');
+            } catch (err: any) {
+              console.warn('[CARNET] Error al enviar con efectos (no crítico):', err?.message || err);
+              // El backend ya envió en background; este paso solo refuerza para asegurar la foto correcta
+            }
           } catch (err: any) {
             console.warn('[BIOMETRIA] Error al asociar (no crítico):', err?.message || err);
-            
+
             showToast(
               'warning', 
               'Tu cuenta está lista, pero no pudimos asociar la foto automáticamente. Puedes agregarla después desde tu perfil.',
@@ -275,26 +284,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
           }
         }, 500);
       }
-
-      // 4B. IMPORTANTE: El backend YA está enviando el email en background
-      // Este endpoint es OPCIONAL y solo sirve para confirmar/reenviar si es necesario
-      // No es necesario llamarlo en el flujo normal de registro
-      
-      // Descomentar solo si quieres forzar reenvío (no recomendado en registro inicial)
-      /*
-      setTimeout(async () => {
-        try {
-          await api(API_ROUTES.SEND_CARD_NOW, {
-            method: 'POST',
-            json: { usuarioId: Number(userId) }
-          });
-          
-          console.log('[EMAIL] Confirmación de envío recibida');
-        } catch (err: any) {
-          console.warn('[EMAIL] Error al confirmar envío (no crítico):', err?.message || err);
-        }
-      }, 2000);
-      */
 
       // ===== LIMPIAR FORMULARIO =====
       setTimeout(() => {
@@ -453,7 +442,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
             name="confirmPassword"
             autoComplete="new-password"
           />
-          {passwordError && (
+        {passwordError && (
             <p className="error-message" role="alert">{passwordError}</p>
           )}
         </div>
@@ -477,7 +466,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onCameraCapture }) => {
             variant="advanced" 
             onClick={onCameraCapture}
           >
-            📸 Registrarse con Foto
+            📸 Tomar Foto de Registro
           </Button>
         </div>
 
