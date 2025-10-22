@@ -217,6 +217,8 @@ const API = {
   upload: `${API_BASE}/api/documentos`,
   analyze: (id: number | string) => `${API_BASE}/api/analisis/${id}`,
   reportPdf: (id: number | string) => `${API_BASE}/api/reportes/analisis/${id}`,
+  reportEmail: (id: number | string, to?: string) =>
+  `${API_BASE}/api/reportes/analisis/${id}/enviar${to ? `?to=${encodeURIComponent(to)}` : ''}`,
 };
 
 async function uploadDocumento(file: File, usuarioId: number, codigoIso: 'es'|'en'|'ru') {
@@ -275,6 +277,7 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCharts, setShowCharts] = useState(false);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -339,6 +342,14 @@ const DashboardPage: React.FC = () => {
   /** Exportar resultados */
   const handleExport = async () => {
   if (!result || documentId == null) return;
+  const userMail = authState?.user?.email || 'tu correo';
+  const send = window.confirm(`¿Quieres ENVIAR el PDF al correo ${userMail}? 
+Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
+  if (send) {
+    await handleSendEmail();
+    return;
+  }
+  // Descarga PDF (tal como ya lo tenías)
   try {
     const token = localStorage.getItem('token') || '';
     const res = await fetch(API.reportPdf(documentId), {
@@ -365,6 +376,27 @@ const DashboardPage: React.FC = () => {
     alert(e?.message || 'Error al exportar PDF');
   }
 };
+
+
+const handleSendEmail = async () => {
+  if (!result || documentId == null) return;
+  try {
+    const token = localStorage.getItem('token') || '';
+    const res = await fetch(API.reportEmail(documentId, authState?.user?.email || ''), {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    if (res.status === 401) { alert('Sesión expirada'); logout(); return; }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`No se pudo enviar el reporte (${res.status}): ${text || res.statusText}`);
+    }
+    alert('📧 Reporte enviado al correo correctamente.');
+  } catch (e: any) {
+    alert(e?.message || 'Error al enviar el PDF por correo');
+  }
+};
+
 
 
   /** Cerrar sesión */
@@ -426,10 +458,6 @@ const DashboardPage: React.FC = () => {
             title={canExport ? T.exportTipOK : T.exportTipNO}
           >
             <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{T.export}</span>
-          </button>
-
-          <button className="btn btn--green-soft">
-            <span style={{display:'inline-flex',gap:8,alignItems:'center'}}>{T.refresh}</span>
           </button>
 
           <button className="btn btn--danger" onClick={handleLogout} title={T.logout}>

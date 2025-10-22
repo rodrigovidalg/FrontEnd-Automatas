@@ -151,7 +151,7 @@ const ChartsView: React.FC<ChartsViewProps> = ({ result, uiLang, onBack }) => {
 
     return (
       <section className="chart-card">
-        <div className="chart-card__header">
+        <div className="chart-card__header" style={{ background: '#225b56', color: '#fff' }}>
           <h3>{title}</h3>
           <div className="chart-card__badge">{data.length} items</div>
         </div>
