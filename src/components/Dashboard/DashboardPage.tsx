@@ -252,16 +252,15 @@ async function analizarDocumento(documentoId: number | string) {
   return resp.json();
 }
 
-
 /** =======================
  *  COMPONENTE PRINCIPAL
  *  ======================= */
 const DashboardPage: React.FC = () => {
   const { authState, logout } = useAuth();
-  
-  const displayName = 
-    authState.user?.fullName || 
-    authState.user?.nickname || 
+
+  const displayName =
+    authState.user?.fullName ||
+    authState.user?.nickname ||
     authState.user?.email?.split('@')[0] ||
     'Usuario';
 
@@ -329,12 +328,12 @@ const DashboardPage: React.FC = () => {
     const userMail = authState?.user?.email || 'tu correo';
     const send = window.confirm(`¿Quieres ENVIAR el PDF al correo ${userMail}? 
 Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
-    
+
     if (send) {
       await handleSendEmail();
       return;
     }
-    
+
     // Descarga PDF
     try {
       const token = localStorage.getItem('token') || '';
@@ -342,18 +341,18 @@ Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
         method: 'GET',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
-      
+
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new Error(`No se pudo generar el PDF (${res.status}): ${text || res.statusText}`);
       }
-      
+
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/pdf')) {
         const text = await res.text().catch(() => '');
         throw new Error(`La API no devolvió un PDF. Content-Type=${ct}. ${text}`);
       }
-      
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -366,15 +365,15 @@ Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
     }
   };
 
-  /** ✅ Enviar email MEJORADO */
+  /** ✅ Enviar email (ajuste mínimo: sin Content-Type si no hay body) */
   const handleSendEmail = async () => {
     if (!result || documentId == null) return;
-    
+
     try {
       const token = localStorage.getItem('token') || '';
       const userEmail = authState?.user?.email?.trim() || '';
-      
-      // ✅ Validación del email
+
+      // Validación del email
       if (!userEmail) {
         alert('❌ No se encontró un email válido en tu sesión.');
         return;
@@ -384,12 +383,13 @@ Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
       console.log('📄 Documento ID:', documentId);
       console.log('🔗 URL:', API.reportEmail(documentId, userEmail));
 
+      // 👇 Cambio: sin Content-Type porque NO enviamos body
+      const headers: Record<string, string> | undefined =
+        token ? { Authorization: `Bearer ${token}` } : undefined;
+
       const res = await fetch(API.reportEmail(documentId, userEmail), {
         method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          'Content-Type': 'application/json'  // ✅ Agregado
-        }
+        headers,
       });
 
       console.log('📊 Response status:', res.status);
@@ -403,9 +403,9 @@ Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         console.error('❌ Error response:', text);
-        
+
         let errorMsg = `Error ${res.status}: ${res.statusText}`;
-        
+
         try {
           const errorJson = JSON.parse(text);
           errorMsg = errorJson?.mensaje || errorJson?.message || errorMsg;
@@ -413,15 +413,14 @@ Pulsa "Aceptar" para ENVIARLO por correo o "Cancelar" para DESCARGARLO.`);
           // Si no es JSON, usar el texto tal cual
           errorMsg = text || errorMsg;
         }
-        
+
         throw new Error(errorMsg);
       }
 
       const data = await res.json().catch(() => ({}));
       console.log('✅ Response data:', data);
-      
+
       alert(`✅ ${data?.mensaje || 'Reporte enviado correctamente'}\n📧 Destinatario: ${userEmail}`);
-      
     } catch (e: any) {
       console.error('❌ Error completo:', e);
       alert(`❌ Error al enviar el PDF por correo:\n\n${e?.message || 'Error desconocido'}`);
